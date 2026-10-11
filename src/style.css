@@ -70,7 +70,6 @@ h2 { font-size: clamp(28px, 7vw, 44px); line-height: 1.15; letter-spacing: -.025
 .row-btns { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
 
 /* uvodna traka na pregledu */
-.wallet.card-tile { background: transparent; width: min(80vw, 330px) }
 .auth .wallet.card-tile { margin: 0; width: min(70vw, 240px) }
 .band { background-color: var(--band); background-image: var(--grain-n), var(--grain-band); background-blend-mode: soft-light, normal; color: var(--band-ink); margin-inline: calc(-1 * var(--gut)); margin-top: calc(-18px - env(safe-area-inset-top, 0px)); padding: calc(18px + env(safe-area-inset-top, 0px)) var(--gut) 30px; display: grid; gap: 0; text-align: center }
 .band .top { justify-content: center; text-align: center }
