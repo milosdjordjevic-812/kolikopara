@@ -13,7 +13,8 @@ export const mountWallet = (el, o = {}) => mountModel(el, { url: "/models/novcan
 export const mountCard = (el, o = {}) => mountModel(el, { url: "/models/kartica.glb", period: 22, ...o });
 
 // still: ugao u radijanima za mirnu sliku bez okretanja (koristi se i za ikonicu appa)
-export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width = 1.15, period = 18, still = null, zoom = 0.9 } = {}) {
+export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width = 1.15, period = 18, still = null, zoom = 0.9, mask = false } = {}) {
+  // mask: površine ne crtaju boju, samo sakrivaju linije iza sebe, pa se vidi pozadina strane
   const reduce = still !== null || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: still !== null });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -33,7 +34,8 @@ export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width 
     const toAdd = [];
     root.traverse(o => {
       if (o.isMesh) {
-        o.material = new MeshBasicMaterial({ color: new Color(fill), polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+        o.material = new MeshBasicMaterial({ color: new Color(fill), colorWrite: !mask, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+        if (mask) o.renderOrder = -1;
         const g = new LineSegmentsGeometry().fromEdgesGeometry(new EdgesGeometry(o.geometry, 28));
         const m = new LineMaterial({ color: new Color(line), linewidth: width });
         mats.push(m);

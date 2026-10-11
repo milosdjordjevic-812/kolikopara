@@ -42,7 +42,13 @@ function startWallet() {
   const el = document.getElementById("wallet") || document.getElementById("card"); if (!el) return;
   import("./wallet.js").then(({ mountWallet, mountCard }) => {
     if (!document.body.contains(el)) return;
-    stopWallet(); unmountWallet = el.id === "card" ? mountCard(el) : mountWallet(el);
+    stopWallet();
+    if (el.id === "card") {
+      // kartica bez kvadrata: samo linija, na vinskoj u boji teksta, inače u boji mastila
+      const cs = getComputedStyle(el.closest(".band") || document.documentElement);
+      const line = el.closest(".band") ? cs.getPropertyValue("--band-ink").trim() || "#ece7d8" : cs.getPropertyValue("--ink").trim() || "#1b1813";
+      unmountWallet = mountCard(el, { line, mask: true, width: 1.3 });
+    } else unmountWallet = mountWallet(el);
   }).catch(() => {});
 }
 
