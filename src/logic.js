@@ -1,0 +1,238 @@
+// Kategorije, pravila i računanje pregleda. Bez DOM-a, da može da se testira.
+import { latin } from "./shared/fiscal.js";
+
+export const CATS = [
+  { id: "market",       name: "Market i namirnice",  kind: "spend" },
+  { id: "dostava",      name: "Dostava hrane",       kind: "spend" },
+  { id: "izlasci",      name: "Kafići i izlasci",    kind: "spend" },
+  { id: "cigarete",     name: "Cigarete",            kind: "spend" },
+  { id: "alkohol",      name: "Alkohol",             kind: "spend" },
+  { id: "gorivo",       name: "Gorivo",              kind: "spend" },
+  { id: "pumpa",        name: "Na pumpi, ostalo",    kind: "spend" },
+  { id: "putarina",     name: "Putarina",            kind: "spend" },
+  { id: "taksi",        name: "Taksi",               kind: "spend" },
+  { id: "pretplate",    name: "Pretplate i alati",   kind: "spend" },
+  { id: "racuni",       name: "Telefon i računi",    kind: "spend" },
+  { id: "apoteka",      name: "Apoteka i drogerija", kind: "spend" },
+  { id: "kupovina",     name: "Kupovina i stvari",   kind: "spend" },
+  { id: "gotovina",     name: "Gotovina, bez računa",kind: "spend" },
+  { id: "provizije",    name: "Banka i provizije",   kind: "spend" },
+  { id: "ostalo",       name: "Ostalo",              kind: "spend" },
+  { id: "nerazvrstano", name: "Nerazvrstano",        kind: "spend" },
+  { id: "interno",      name: "Moj prenos",          kind: "neutral" },
+  { id: "priliv",       name: "Priliv",              kind: "income" },
+  { id: "prolazno",     name: "Prolazno",            kind: "pass" },
+];
+export const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
+export const catName = id => (CAT[id] || CAT.nerazvrstano).name;
+
+const MERCHANT = [
+  ["interno",   /MILO[SŠ] [ĐD]?J?OR[ĐD]?J?EVI[CĆ] PR|MILO[SŠ] \?OR\?EVIC PR|MENJA[CČ]NICA|SMART ATM - UPLATA|TRAJNI N/],
+  ["provizije", /PROVIZIJ|UPIT STANJA|NAPLATA DOSPELIH|PREMIJE OSIGURANJA|OSIGURANJE - PAKET/],
+  ["dostava",   /WOLT|GLOVO/],
+  ["taksi",     /YANDEX ?GO|CAR:GO|NAXI|PINK TAXI/],
+  ["pretplate", /ADOBE|APPLE\.COM|OPENAI|MIDJOURNEY|GOOGLE|FORMIA|SPOTIFY|NETFLIX|FIGMA|NOTION|DROPBOX/],
+  ["racuni",    /YETTEL|A1 SRBIJA|TELEKOM|\bMTS\b|\bSBB\b|\bEPS\b|ELEKTROPRIVREDA|INFOSTAN|BEOGRADSKE ELEKTRANE|VODOVOD/],
+  ["market",    /UNIVEREXPORT|MAXI|C MARKET|LIDL|SVEZE VOCE|SVEŽE VOĆE|THE PIJAC|AMAN DOO|\bIDEA\b|TEMPO|RODA|PERSPEKTIVA|DELHAIZE|MERCATOR/],
+  ["izlasci",   /ZABAC|ŽABAC|BAR ZA|PIZZ|KAFE|CAFFE|KESTEN|ARGUMENT|HVALA TIP|RESTORAN/],
+  ["pumpa",     /MOL SERBIA|\bMOL\b|\bOMV\b|LUKOIL|EKO SERBIA|GASPETROL|\bNIS\b|PETROL/],
+  ["putarina",  /JP PUTEVI|PUTEVI SRBIJE/],
+  ["apoteka",   /APOTEK|BENU|DM DROGERIE|\bDM\b|AGAPE ZU|LILLY/],
+  ["kupovina",  /GIGATRON|ROBNA KUCA|ROBNA KUĆA|PANDA 888|TEHNOMANIJA|IKEA/],
+];
+
+const ITEM = [
+  ["cigarete", /MARLBORO|ROTHMANS|WINSTON|\bLD\b|CAMEL|PALL MALL|DAVIDOFF|CHESTERFIELD|PARLIAMENT|\bVOGUE\b|\bKENT\b|DUNHILL|LUCKY STRIKE|\bWEST\b|MORAVA|\bDRINA\b|CIGARE|IQOS|HEETS|TEREA|\bGLO\b|NEO STIK|DUVAN|TOBACCO|ELF ?BAR|VAPE|E-CIG|FILTER CIG|RIZLE/],
+  ["gorivo",   /\bBMB\b|EVRO ?DIZEL|EURO ?DIESEL|\bDIZEL\b|DIESEL|G-DRIVE|BENZIN|\bTNG\b|AUTOGAS|AUTO GAS|\bLPG\b|MAXX ?MOTION|ADBLUE|EN ?590|\bEVRO ?PREMIUM\b/],
+  ["alkohol",  /\bPIVO\b|\bBEER\b|\bVINO\b|\bWINE\b|RAKIJA|VOTKA|VODKA|VISKI|WHISK|JAGERMEISTER|J[ÄA]GER|\bGIN\b|\bRUM\b|\bJELEN\b|ZAJE[ČC]ARSKO|HEINEKEN|TUBORG|CARLSBERG|STELLA ARTOIS|NIKSI[ČC]KO|\bLAV PIVO/],
+];
+
+export const upper = s => latin(s).toUpperCase();
+const r2 = n => Math.round(n * 100) / 100;
+
+export function merchantKey(desc) {
+  let s = upper(desc).replace(/\s+/g, " ").trim();
+  s = s.replace(/^\d+\s*-\s*/, "");
+  if (/^(PAYSPOT DOO|ALTA\s+GROUP)\*/.test(s)) s = s.replace(/^[^*]+\*/, "");
+  else s = s.replace(/\s*\*.*$/, "");
+  s = s.split(/ SRB\b| USA\b| IRL\b| CAN\b/)[0];
+  s = s.replace(/ ZIRO RACUN.*$/, "").trim();
+  return s || upper(desc);
+}
+export const groupKey = s => merchantKey(s).replace(/[\s.\-]/g, "");
+
+function bestRule(rules, kind, textU) {
+  let best = null;
+  for (const r of rules) if (r.kind === kind && r.match && textU.includes(r.match) && (!best || r.match.length > best.match.length)) best = r;
+  return best;
+}
+
+export function merchantCat(rules, text, amount) {
+  const u = upper(text);
+  if (/^BANKOMAT/.test(u)) return Math.abs(amount) % 1000 === 0 ? { cat: "gotovina", cash: true } : { cat: "provizije", label: "Provizija bankomata" };
+  const r = bestRule(rules, "merchant", u);
+  if (r) return { cat: r.cat, person: r.person || "", rule: r.match };
+  for (const [c, re] of MERCHANT) if (re.test(u)) return { cat: c };
+  return { cat: amount > 0 ? "priliv" : "nerazvrstano" };
+}
+
+export function itemCat(rules, name) {
+  const u = upper(name);
+  const r = bestRule(rules, "item", u);
+  if (r) return { cat: r.cat, rule: r.match };
+  for (const [c, re] of ITEM) if (re.test(u)) return { cat: c };
+  return null;
+}
+
+const dayNum = d => Math.round(Date.parse(String(d).slice(0, 10) + "T00:00:00Z") / 864e5);
+
+/*
+ * state: { tx:[{id,d,t,a}], overrides:{id:{cat,person,pass}}, rules:[...], receipts:[...] }
+ * Vraća listu stavki za prikaz. Svaka ima parts: [{cat, amount, person, items?}].
+ */
+export function derive(state) {
+  const { tx = [], overrides = {}, rules = [], receipts = [] } = state;
+  const rows = [...tx].sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+
+  // 1. provizija za konverziju stranih plaćanja ide uz samu kupovinu
+  const groups = {};
+  for (const r of rows) if (r.a < 0 && !/^BANKOMAT/i.test(r.t)) (groups[r.d + "|" + upper(r.t)] ||= []).push(r);
+  const merged = new Set(), feeOf = {};
+  for (const g of Object.values(groups)) {
+    if (g.length < 2) continue;
+    const big = g.reduce((a, b) => (Math.abs(b.a) > Math.abs(a.a) ? b : a));
+    for (const r of g) if (r !== big && Math.abs(r.a) < 200 && Math.abs(r.a) <= Math.abs(big.a) * 0.013) { merged.add(r.id); feeOf[big.id] = (feeOf[big.id] || 0) + r.a; }
+  }
+
+  // 2. bankovne stavke
+  const bank = [];
+  for (const r of rows) {
+    if (merged.has(r.id)) continue;
+    const fee = feeOf[r.id] || 0, amount = r2(r.a + fee);
+    const auto = merchantCat(rules, r.t, r.a), ov = overrides[r.id];
+    bank.push({
+      type: "bank", id: r.id, d: r.d, t: r.t, name: merchantKey(r.t), amount, raw: r.a, fee,
+      auto, ov, cat: ov ? ov.cat : auto.cat, person: ov ? ov.person || "" : auto.person || "",
+      manual: !!ov, rule: auto.rule || null, label: auto.label || "", receipt: null,
+    });
+  }
+
+  // 3. uparivanje računa i uplatnica koji nisu plaćeni gotovinom sa stavkom iz banke
+  const recs = [...receipts].sort((a, b) => (a.issued_at < b.issued_at ? -1 : 1));
+  const taken = new Set();
+  for (const rc of recs) {
+    if (rc.payment === "gotovina") continue;
+    const target = rc.refund ? Math.abs(rc.total) : -Math.abs(rc.total);
+    const rd = dayNum(rc.issued_at);
+    let best = null, bestGap = 99;
+    for (const b of bank) {
+      if (taken.has(b.id) || b.auto.cash) continue;
+      if (Math.abs(b.raw - target) > 0.01 && Math.abs(b.amount - target) > 0.01) continue;
+      const gap = dayNum(b.d) - rd;
+      if (gap < -1 || gap > 4) continue;
+      if (Math.abs(gap) < bestGap) { best = b; bestGap = Math.abs(gap); }
+    }
+    if (best) { taken.add(best.id); best.receipt = rc; rc._matched = best.id; } else rc._matched = null;
+  }
+
+  const out = [];
+  for (const e of bank) {
+    e.parts = bankParts(e, rules);
+    out.push(e);
+  }
+
+  // 4. računi bez para u banci: gotovina, ili kartica čiji izvod još nije ubačen
+  for (const rc of recs) {
+    if (rc._matched) continue;
+    const d = String(rc.issued_at).slice(0, 10);
+    const sign = rc.refund ? 1 : -1;
+    const amount = sign * Math.abs(rc.total);
+    const title = rc.kind === "ips" ? (rc.merchant || "Uplatnica") : rc.kind === "manual" ? (rc.merchant || "Ručni unos") : (rc.store || rc.merchant || "Račun");
+    const base = rc.cat || receiptBaseCat(rules, rc);
+    const e = {
+      type: "receipt", id: "r:" + rc.id, d, t: title, name: upper(title), amount, receipt: rc,
+      cash: rc.payment === "gotovina", pending: rc.payment !== "gotovina",
+      cat: base, person: rc.person || "", manual: !!rc.cat,
+    };
+    e.parts = base === "prolazno"
+      ? [{ cat: "prolazno", amount, person: rc.person || "" }]
+      : itemParts(rules, rc.items || [], amount, base, sign);
+    out.push(e);
+  }
+  out.sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+  return out;
+}
+
+function receiptBaseCat(rules, rc) {
+  const name = [rc.merchant, rc.store].filter(Boolean).join(" ");
+  const m = merchantCat(rules, name, -1);
+  if (m.cat !== "nerazvrstano") return m.cat;
+  if (rc.kind === "ips") return "racuni";
+  return "nerazvrstano";
+}
+
+function bankParts(e, rules) {
+  const ov = e.ov;
+  if (e.cat === "prolazno") {
+    const pass = ov && ov.pass ? Math.min(Math.abs(ov.pass), Math.abs(e.amount)) : null;
+    if (pass !== null && pass < Math.abs(e.amount) - 0.005) {
+      const sign = Math.sign(e.amount) || -1;
+      const rest = e.auto.cat === "prolazno" ? (e.amount > 0 ? "priliv" : "nerazvrstano") : e.auto.cat;
+      return [{ cat: "prolazno", amount: sign * pass, person: e.person }, { cat: rest, amount: r2(e.amount - sign * pass) }];
+    }
+    return [{ cat: "prolazno", amount: e.amount, person: e.person }];
+  }
+  if (e.receipt && e.receipt.kind === "fiscal" && (e.receipt.items || []).length) {
+    return itemParts(rules, e.receipt.items, e.amount, e.cat, e.amount < 0 ? -1 : 1);
+  }
+  if (e.receipt && e.receipt.cat && !e.ov) return [{ cat: e.receipt.cat, amount: e.amount, person: e.receipt.person || "" }];
+  return [{ cat: e.cat, amount: e.amount, person: e.person }];
+}
+
+// raspodela iznosa po artiklima; artikli bez posebne kategorije idu u osnovnu
+function itemParts(rules, items, amount, base, sign) {
+  if (!items.length) return [{ cat: base, amount }];
+  const by = new Map();
+  let covered = 0;
+  for (const it of items) {
+    const ic = itemCat(rules, it.name);
+    const cat = ic ? ic.cat : base;
+    const val = sign * Math.abs(it.total);
+    covered += val;
+    if (!by.has(cat)) by.set(cat, { cat, amount: 0, items: [] });
+    const p = by.get(cat); p.amount = r2(p.amount + val); p.items.push({ ...it, cat, rule: ic && ic.rule });
+  }
+  const rest = r2(amount - covered);
+  if (Math.abs(rest) >= 0.01) {
+    if (!by.has(base)) by.set(base, { cat: base, amount: 0, items: [] });
+    by.get(base).amount = r2(by.get(base).amount + rest);
+  }
+  return [...by.values()].filter(p => Math.abs(p.amount) >= 0.005 || p.items.length);
+}
+
+/* Zbirovi za period. Gotovina se umanjuje za račune plaćene gotovinom. */
+export function totals(list) {
+  const by = {}; let bankSpend = 0, inc = 0, W = 0, C = 0, feeConv = 0;
+  const add = (cat, v) => { (by[cat] ||= { sum: 0, n: 0 }); by[cat].sum = r2(by[cat].sum + v); by[cat].n++; };
+  for (const e of list) {
+    if (e.fee) feeConv += -e.fee;
+    for (const p of e.parts) {
+      const c = CAT[p.cat] || CAT.nerazvrstano;
+      if (p.cat === "gotovina") { W += -p.amount; continue; }
+      add(c.id, p.amount);
+      if (c.kind === "spend") { if (e.cash) C += -p.amount; else bankSpend += -p.amount; }
+      if (c.kind !== "pass" && p.amount > 0 && e.type === "bank") inc += p.amount;
+    }
+  }
+  const nWithdrawals = list.filter(e => e.parts.some(p => p.cat === "gotovina")).length;
+  const unexplained = Math.max(0, r2(W - C));
+  if (unexplained > 0) { by.gotovina = { sum: -unexplained, n: nWithdrawals }; }
+  const spend = r2(bankSpend + C + unexplained);
+  return { by, spend, inc: r2(inc), withdrawn: r2(W), cashReceipts: r2(C), unexplained, feeConv: r2(feeConv) };
+}
+
+export function stableId(d, t, a, occ) {
+  let h = 5381; const s = `${d}|${t}|${Number(a).toFixed(2)}|${occ}`;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return d.replace(/-/g, "") + h.toString(36);
+}

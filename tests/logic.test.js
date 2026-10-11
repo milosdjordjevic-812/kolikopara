@@ -1,0 +1,44 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, existsSync } from "node:fs";
+import { derive, totals, stableId } from "../src/logic.js";
+
+// Lični podaci nisu u repou; ovi testovi rade samo lokalno kad fajl postoji.
+const FIX = new URL("./fixtures/months.json", import.meta.url);
+const have = existsSync(FIX);
+const months = have ? JSON.parse(readFileSync(FIX)) : {};
+const tx = Object.values(months).flatMap(m => m.rows);
+const overrides = { "20261006nev7xo": { cat: "prolazno", person: "Dejan Arsić" }, "2026100619tb6sr": { cat: "prolazno", person: "Dejan Arsić" } };
+const rules = [{ kind: "merchant", match: "MARKO ANDJELKOVIC", cat: "prolazno", person: "Marko Anđelković" }];
+
+const t = have ? test : test.skip;
+t("isti zbirovi kao prva verzija", () => {
+  const T = totals(derive({ tx, overrides, rules, receipts: [] }));
+  assert.equal(T.spend, 456919.51);
+  assert.equal(T.withdrawn, 242000);
+  assert.equal(T.inc, 462263.64);
+});
+
+test("stabilni id isti kao u prvoj verziji", () => {
+  assert.equal(stableId("2026-10-06", "Dejan Arsić", -185000, 1), "20261006nev7xo");
+});
+
+t("račun karticom se upari sa stavkom iz banke i razbije po artiklima", () => {
+  const rc = { id: "a", kind: "fiscal", issued_at: "2026-10-05T10:00:00", merchant: "MOL Serbia", total: 1049.99, payment: "kartica",
+    items: [{ name: "Marlboro Gold", total: 580 }, { name: "Espresso", total: 469.99 }] };
+  const list = derive({ tx, overrides, rules, receipts: [rc] });
+  const e = list.find(x => x.receipt === rc);
+  assert.equal(e.type, "bank");
+  assert.deepEqual(e.parts.map(p => [p.cat, p.amount]), [["cigarete", -580], ["pumpa", -469.99]]);
+  const T = totals(list);
+  assert.equal(T.spend, 456919.51); // ukupno se ne menja, samo raspodela
+  assert.equal(T.by.cigarete.sum, -580);
+});
+
+t("račun gotovinom smanjuje neobjašnjenu gotovinu, ukupno isto", () => {
+  const rc = { id: "b", kind: "fiscal", issued_at: "2026-10-05T10:00:00", merchant: "Trafika", total: 600, payment: "gotovina", items: [{ name: "LD Blue", total: 600 }] };
+  const T = totals(derive({ tx, overrides, rules, receipts: [rc] }));
+  assert.equal(T.cashReceipts, 600);
+  assert.equal(T.unexplained, 241400);
+  assert.equal(T.spend, 456919.51);
+});
