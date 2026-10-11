@@ -5,6 +5,7 @@ import { parseIps, isFiscalUrl } from "./shared/fiscal.js";
 import { startCamera, grabFrame } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
+import { shouldPlayIntro, playIntro } from "./intro.js";
 
 /* ---------- pomoćne ---------- */
 const nf0 = new Intl.NumberFormat("sr-Latn-RS", { maximumFractionDigits: 0 });
@@ -852,7 +853,7 @@ async function checkUpdate() {
   try {
     const t = await (await fetch("/", { cache: "no-store" })).text();
     const m = t.match(/\/assets\/index-[^"']+\.js/);
-    if (m && !myBuild.endsWith(m[0])) location.reload();
+    if (m && !myBuild.endsWith(m[0])) { try { sessionStorage.setItem("kp-skip-intro", "1"); } catch (_) {} location.reload(); }
   } catch (_) {}
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkUpdate(); });
@@ -860,6 +861,7 @@ setTimeout(checkUpdate, 4000);
 
 /* ---------- start ---------- */
 applyTheme(getTheme());
+if (configured && shouldPlayIntro()) playIntro();
 if (configured) {
   sb.auth.getSession().then(({ data }) => { S.session = data.session; render(); if (S.session) load(); });
   sb.auth.onAuthStateChange((evt, session) => {

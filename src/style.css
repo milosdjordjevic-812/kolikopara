@@ -224,3 +224,11 @@ section { margin-top: 52px }
 @keyframes flash { from { opacity: .8 } to { opacity: 0 } }
 .cam[data-mode="text"] .frame { top: 38%; height: 60%; width: auto; aspect-ratio: .62 }
 .cam[data-mode="text"] .hint { top: auto; bottom: 92px; font-size: 14px; line-height: 19px }
+
+/* uvod */
+#intro { position: fixed; inset: 0; z-index: 60; overflow: hidden }
+#intro .i-bg { position: absolute; inset: 0; background: #dfddcd; will-change: clip-path }
+#intro .i-card { position: absolute; will-change: transform }
+#intro .i-card canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block }
+#intro .i-logo { position: absolute; left: 50%; font-size: 30px; transform: translate(-50%, 0); white-space: nowrap; color: #1b1813; opacity: 0; will-change: transform }
+.intro-on #app .logo { visibility: hidden }
