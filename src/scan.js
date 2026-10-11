@@ -50,7 +50,7 @@ export function startCamera(video, onResult, onError) {
     video.srcObject = null;
   }
 
-  navigator.mediaDevices?.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
+  navigator.mediaDevices?.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false })
     .then(s => {
       if (stopped) { s.getTracks().forEach(tr => tr.stop()); return; }
       stream = s; video.srcObject = s; video.setAttribute("playsinline", ""); video.muted = true;
@@ -59,4 +59,22 @@ export function startCamera(video, onResult, onError) {
     .catch(err => { if (!stopped) onError(err); });
   if (!navigator.mediaDevices?.getUserMedia) setTimeout(() => onError(new Error("no-camera")), 0);
   return stop;
+}
+
+// Slika iz kamere za čitanje teksta: isečak koji je u okviru na ekranu (plus malo oko njega), u punoj rezoluciji.
+export function grabFrame(video, frameEl) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh || video.readyState < 2) return null;
+  let sx = 0, sy = 0, sw = vw, sh = vh;
+  if (frameEl) {
+    const vr = video.getBoundingClientRect(), fr = frameEl.getBoundingClientRect();
+    const k = Math.max(vr.width / vw, vr.height / vh);          // object-fit: cover
+    const ox = (vr.width - vw * k) / 2, oy = (vr.height - vh * k) / 2;
+    const m = 0.12 * Math.max(fr.width, fr.height);
+    sx = Math.max(0, (fr.left - vr.left - m - ox) / k); sy = Math.max(0, (fr.top - vr.top - m - oy) / k);
+    sw = Math.min(vw - sx, (fr.width + 2 * m) / k); sh = Math.min(vh - sy, (fr.height + 2 * m) / k);
+  }
+  const c = document.createElement("canvas"); c.width = Math.round(sw); c.height = Math.round(sh);
+  c.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  return new Promise(res => c.toBlob(b => { c.width = c.height = 0; res(b); }, "image/jpeg", 0.92));
 }

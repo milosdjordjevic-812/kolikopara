@@ -2,7 +2,7 @@ import "./style.css";
 import { sb, configured, loadAll, saveOverride, deleteOverride, saveRule, deleteRule, insertReceipt, updateReceipt, deleteReceipt, replaceBankRange, importBackup, exportBackup } from "./db.js";
 import { CATS, CAT, catName, derive, totals, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
 import { parseIps, isFiscalUrl } from "./shared/fiscal.js";
-import { startCamera } from "./scan.js";
+import { startCamera, grabFrame } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
 
@@ -524,14 +524,14 @@ async function saveItem() {
 let stopCam = null;
 const CAMHINT = {
   qr: "Uperi kameru u QR kod sa računa ili uplatnice",
-  text: "Za račun čiji QR ne može da se pročita. Slikaj ceo račun ravno i izbliza, pri dobrom svetlu, da se vide artikli i ukupan iznos. Tekst se čita na telefonu.",
+  text: "Za račun čiji QR ne može da se pročita. Stavi račun u okvir, ravno i izbliza, pri dobrom svetlu, da se vide artikli i ukupan iznos, pa dodirni Slikaj.",
 };
 function openScan() {
   closeCam();
   const cam = document.createElement("div"); cam.className = "cam"; cam.id = "cam"; cam.dataset.mode = "qr";
   cam.innerHTML = `<div class="view"><video autoplay playsinline muted></video><div class="frame"></div><button class="cta close" data-camclose>[ Nazad ]</button>
     <div class="hint" id="cam-hint">${CAMHINT.qr}</div>
-    <label class="filebtn shutter"><input type="file" id="cam-text" accept="image/*" capture="environment"><span class="b">[ Slikaj račun ]</span></label></div>
+    <button class="cta shutter" data-shoot>[ Slikaj ]</button><input type="file" id="cam-text" accept="image/*" capture="environment" hidden><div class="flash"></div></div>
   <div class="bottom">
     <div class="modes"><button class="mode" data-mode="qr" aria-pressed="true">Skeniraj QR</button><button class="mode" data-mode="text" aria-pressed="false">Slikaj tekst računa</button></div>
     <button class="btn" data-manual>Unesi ručno</button>
@@ -544,6 +544,14 @@ function openScan() {
   cam.addEventListener("click", ev => {
     if (ev.target.closest("[data-camclose]")) closeCam();
     if (ev.target.closest("[data-manual]")) { closeCam(); openManual(); }
+    if (ev.target.closest("[data-shoot]")) {
+      // slika se pravi iz kamere u appu; ako kamera ne radi, otvara se kamera telefona
+      const v = cam.querySelector("video"), p = cam.dataset.nocam ? null : grabFrame(v, cam.querySelector(".frame"));
+      if (!p) { cam.querySelector("#cam-text").click(); return; }
+      cam.classList.add("shot");
+      p.then(blob => { if (blob) startOcr(blob); else cam.querySelector("#cam-text").click(); });
+      return;
+    }
     const m = ev.target.closest("[data-mode]");
     if (m) {
       cam.dataset.mode = m.dataset.mode;
