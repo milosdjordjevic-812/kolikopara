@@ -6,12 +6,16 @@ import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 
-let modelPromise = null;
-const loadModel = () => (modelPromise ||= new GLTFLoader().loadAsync("/models/novcanik.glb"));
+const cache = {};
+const loadModel = url => (cache[url] ||= new GLTFLoader().loadAsync(url));
 
-export function mountWallet(el, { line = "#1b1813", fill = "#dfddcd", width = 1.15 } = {}) {
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const renderer = new WebGLRenderer({ antialias: true, alpha: true });
+export const mountWallet = (el, o = {}) => mountModel(el, { url: "/models/novcanik.glb", ...o });
+export const mountCard = (el, o = {}) => mountModel(el, { url: "/models/kartica.glb", period: 22, ...o });
+
+// still: ugao u radijanima za mirnu sliku bez okretanja (koristi se i za ikonicu appa)
+export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width = 1.15, period = 18, still = null, zoom = 0.9 } = {}) {
+  const reduce = still !== null || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: still !== null });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor(0x000000, 0);
   el.appendChild(renderer.domElement);
@@ -23,7 +27,7 @@ export function mountWallet(el, { line = "#1b1813", fill = "#dfddcd", width = 1.
   const mats = [];
   let disposed = false, raf = 0, visible = true, t0 = performance.now();
 
-  loadModel().then(gltf => {
+  loadModel(url).then(gltf => {
     if (disposed) return;
     const root = gltf.scene.clone(true);
     const toAdd = [];
@@ -54,10 +58,10 @@ export function mountWallet(el, { line = "#1b1813", fill = "#dfddcd", width = 1.
     root.position.sub(c);
     spin.add(root);
     const r = size.length() / 2;
-    const dist = r / Math.sin((camera.fov * Math.PI / 180) / 2) * 0.9;
+    const dist = r / Math.sin((camera.fov * Math.PI / 180) / 2) * zoom;
     camera.position.set(0, r * 0.55, dist);
     camera.lookAt(0, 0, 0);
-    resize(); frame(performance.now());
+    resize(); frame(performance.now()); el.dataset.ready = "1";
   }).catch(() => { el.classList.add("wallet-failed"); });
 
   function resize() {
@@ -69,7 +73,7 @@ export function mountWallet(el, { line = "#1b1813", fill = "#dfddcd", width = 1.
   function frame(t) {
     if (disposed) return;
     const s = (t - t0) / 1000;
-    spin.rotation.y = reduce ? 0.6 : s * (Math.PI * 2 / 18);   // jedan krug za 18 sekundi
+    spin.rotation.y = still !== null ? still : reduce ? 0.6 : s * (Math.PI * 2 / period);   // jedan krug za period sekundi
     spin.rotation.x = reduce ? 0 : Math.sin(s * 0.5) * 0.05;
     renderer.render(scene, camera);
     if (!reduce && visible && !document.hidden) raf = requestAnimationFrame(frame);

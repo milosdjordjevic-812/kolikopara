@@ -1,4 +1,4 @@
-# Koliko para
+# Kolko para?
 
 Lični app za praćenje troškova. Izvod iz Raiffeisen e-bankinga je osnova, a fiskalni računi, uplatnice i ručni unosi dodaju detalje: šta je kupljeno, šta je plaćeno gotovinom i čiji novac je samo prošao preko računa.
 
@@ -22,7 +22,7 @@ Lični app za praćenje troškova. Izvod iz Raiffeisen e-bankinga je osnova, a f
 3. U Safariju klikni **Podeli**, pa **Dodaj na početni ekran**.
 
 ### 4. Podaci iz prve verzije
-U appu otvori **Više**, pa **Uvezi kopiju**, i izaberi fajl `koliko-para-migracija.json`.
+U appu otvori **Više**, pa **Uvezi kopiju**, i izaberi fajl `koliko-para-migracija.json` (ime fajla je ostalo staro).
 
 ## Svaki mesec
 - Izvezi promet tekućeg računa iz web e-bankinga (Excel ili CSV) i ubaci ga u **Više**, **Izvod**.

@@ -23,7 +23,7 @@ const puta = n => n + " " + (n % 10 === 1 && n % 100 !== 11 ? "put" : "puta");
 const PAYNAME = { gotovina: "Gotovina", kartica: "Kartica", racun: "Sa računa" };
 
 /* ---------- tema: sistem, svetla ili tamna ---------- */
-function getTheme() { try { return localStorage.getItem("kp-theme") || "sistem"; } catch (_) { return "sistem"; } }
+function getTheme() { try { return localStorage.getItem("kp-theme") || "svetla"; } catch (_) { return "svetla"; } }
 function applyTheme(t) {
   const root = document.documentElement;
   if (t === "svetla") root.dataset.theme = "light"; else if (t === "tamna") root.dataset.theme = "dark"; else delete root.dataset.theme;
@@ -39,10 +39,10 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", (
 let unmountWallet = null;
 function stopWallet() { if (unmountWallet) { unmountWallet(); unmountWallet = null; } }
 function startWallet() {
-  const el = document.getElementById("wallet"); if (!el) return;
-  import("./wallet.js").then(({ mountWallet }) => {
+  const el = document.getElementById("wallet") || document.getElementById("card"); if (!el) return;
+  import("./wallet.js").then(({ mountWallet, mountCard }) => {
     if (!document.body.contains(el)) return;
-    stopWallet(); unmountWallet = mountWallet(el);
+    stopWallet(); unmountWallet = el.id === "card" ? mountCard(el) : mountWallet(el);
   }).catch(() => {});
 }
 
@@ -71,7 +71,8 @@ async function guard(fn, okMsg) {
 function renderAuth(mode = "in", err = "") {
   app.innerHTML = `
   <div class="auth">
-    <div class="logo">[koliko para]</div>
+    <div class="logo">[kolko para?]</div>
+    <div class="wallet card-tile" id="card"></div>
     <h2>${mode === "in" ? "Prijava" : "Novi nalog"}</h2>
     <form id="auth" class="map" style="grid-template-columns:1fr">
       <label class="field"><span class="meta dim">Email</span><input id="a-email" type="email" autocomplete="email" required></label>
@@ -81,6 +82,7 @@ function renderAuth(mode = "in", err = "") {
       <button class="btn" type="button" id="a-switch">${mode === "in" ? "Prvi put? Napravi nalog" : "Već imam nalog"}</button></div>
     </form>
   </div>`;
+  startWallet();
   document.getElementById("a-switch").onclick = () => renderAuth(mode === "in" ? "up" : "in");
   document.getElementById("auth").onsubmit = async ev => {
     ev.preventDefault();
@@ -106,16 +108,16 @@ const lastBank = () => S.data.tx.reduce((m, r) => (r.d > m ? r.d : m), "");
 
 /* ---------- okvir ---------- */
 function render() {
-  if (!configured) { app.innerHTML = `<div class="auth"><div class="logo">[koliko para]</div><h2>Fale podešavanja</h2><p class="lead">Nedostaju adresa i ključ Supabase baze. Dodaj ih u Vercel podešavanjima kao VITE_SUPABASE_URL i VITE_SUPABASE_ANON_KEY, pa ponovo objavi.</p></div>`; return; }
-  if (!S.session) { renderAuth(); tabbar(false); return; }
+  if (!configured) { app.innerHTML = `<div class="auth"><div class="logo">[kolko para?]</div><h2>Fale podešavanja</h2><p class="lead">Nedostaju adresa i ključ Supabase baze. Dodaj ih u Vercel podešavanjima kao VITE_SUPABASE_URL i VITE_SUPABASE_ANON_KEY, pa ponovo objavi.</p></div>`; return; }
+  if (!S.session) { stopWallet(); renderAuth(); tabbar(false); return; }
   tabbar(true);
   stopWallet(); applyTheme(getTheme());
-  if (!S.ready) { app.innerHTML = `<div class="top"><div class="logo">[koliko para]</div></div><div class="empty" style="margin-top:40px"><span class="meta dim">${esc(S.loadError || "Učitavam")}</span></div>`; return; }
+  if (!S.ready) { app.innerHTML = `<div class="top"><div class="logo">[kolko para?]</div></div><div class="empty" style="margin-top:40px"><span class="meta dim">${esc(S.loadError || "Učitavam")}</span></div>`; return; }
   const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore }[S.view];
   v();
 }
 function header() {
-  return `<div class="top"><div class="logo">[koliko para]</div><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više" })[S.view])}</span></div>${installHint()}`;
+  return `<div class="top"><div class="logo">[kolko para?]</div><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više" })[S.view])}</span></div>${installHint()}`;
 }
 function tabbar(show) {
   let bar = document.querySelector(".tabbar");
@@ -147,7 +149,15 @@ function periodChips() {
 function renderOverview() {
   const all = list();
   if (!all.length) {
-    app.innerHTML = `${header()}<div class="empty" style="margin-top:40px"><span class="eyebrow">[prazno]</span><h2>Još nema stavki</h2><p class="lead">Skeniraj prvi račun dugmetom dole, ili u delu Više ubaci izvod iz e-bankinga ili rezervnu kopiju.</p></div>`;
+    app.innerHTML = `<div class="band">
+      <div class="top"><div class="logo">[kolko para?]</div></div>
+      ${installHint()}
+      <div style="margin-top:30px"><span class="eyebrow">[još nema stavki]</span></div>
+      <div class="wallet card-tile" id="card"></div>
+      <div class="actions"><button class="cta big" data-scan>[ Skeniraj prvi račun ]</button></div>
+      <p class="sub"><span>Ili u delu Više ubaci</span> izvod iz e-bankinga <span>ili rezervnu kopiju.</span></p>
+    </div>`;
+    startWallet();
     return;
   }
   const L = all.filter(inPeriod), T = totals(L);
@@ -167,7 +177,7 @@ function renderOverview() {
   const pending = L.filter(e => e.type === "receipt" && e.pending).length;
 
   app.innerHTML = `<div class="band">
-    <div class="top"><div class="logo">[koliko para]</div></div>
+    <div class="top"><div class="logo">[kolko para?]</div></div>
     ${installHint()}
     ${periodChips()}
     <div style="margin-top:26px"><span class="eyebrow">[${from ? esc(dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
@@ -509,11 +519,10 @@ let stopCam = null;
 function openScan() {
   closeCam();
   const cam = document.createElement("div"); cam.className = "cam"; cam.id = "cam";
-  cam.innerHTML = `<video autoplay playsinline muted></video><div class="frame"></div><div class="hint" id="cam-hint">Uperi kameru u QR kod sa računa ili uplatnice</div>
+  cam.innerHTML = `<div class="view"><video autoplay playsinline muted></video><div class="frame"></div><button class="cta close" data-camclose>[ Nazad ]</button><div class="hint" id="cam-hint">Uperi kameru u QR kod sa računa ili uplatnice</div></div>
   <div class="bottom">
     <label class="filebtn"><input type="file" id="cam-file" accept="image/*"><span class="b">Iz slike</span></label>
     <button class="btn" data-manual>Unesi ručno</button>
-    <button class="btn" data-camclose>Zatvori</button>
   </div>`;
   document.body.appendChild(cam);
   const hint = cam.querySelector("#cam-hint");
@@ -652,7 +661,7 @@ app.addEventListener("click", async ev => {
   }
   if (t.closest("[data-export]")) {
     const blob = new Blob([JSON.stringify(exportBackup(S.data), null, 1)], { type: "application/json" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `koliko-para-kopija-${today()}.json`;
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `kolko-para-kopija-${today()}.json`;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     return;
   }

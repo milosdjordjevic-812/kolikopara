@@ -7,9 +7,12 @@
   --line: rgba(27,24,19,.14); --track: rgba(27,24,19,.08); --soft: rgba(27,24,19,.045);
   --pos: #454f3d; --scrim: rgba(27,24,19,.38);
   /* uvodna traka je ista u obe teme, kao hero na portfoliju */
+  --grain-band: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .89 0 0 0 0 .88 0 0 0 0 .82 0 0 0 .09 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   --band: #73393a; --band-ink: #ece7d8; --band-mute: #a89a90; --tile: #dfddcd;
   --f: "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --gut: clamp(16px, 4.2vw, 60px);
+  /* zrno ide samo na pozadine, nikad preko teksta, slika ili dugmadi */
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .11 0 0 0 0 .09 0 0 0 0 .07 0 0 0 .11 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   --bar: 62px;
   color-scheme: light;
 }
@@ -19,7 +22,7 @@
     --sage: #56624b; --on-sage: #ece7d8; --wine: #8a4748; --on-wine: #efe9dc;
     --cta: #e3e0d2; --on-cta: #1b1813;
     --line: rgba(227,224,210,.16); --track: rgba(227,224,210,.10); --soft: rgba(227,224,210,.05);
-    --pos: #a9b998; --scrim: rgba(0,0,0,.55); color-scheme: dark;
+    --pos: #a9b998; --scrim: rgba(0,0,0,.55); --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .89 0 0 0 0 .88 0 0 0 0 .82 0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
@@ -27,10 +30,11 @@
   --sage: #56624b; --on-sage: #ece7d8; --wine: #8a4748; --on-wine: #efe9dc;
   --cta: #e3e0d2; --on-cta: #1b1813;
   --line: rgba(227,224,210,.16); --track: rgba(227,224,210,.10); --soft: rgba(227,224,210,.05);
-  --pos: #a9b998; --scrim: rgba(0,0,0,.55); color-scheme: dark;
+  --pos: #a9b998; --scrim: rgba(0,0,0,.55); --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .89 0 0 0 0 .88 0 0 0 0 .82 0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); color-scheme: dark;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent }
-html, body { margin: 0; background: var(--bg) }
+html, body { margin: 0; background-color: var(--bg) }
+body { background-image: var(--grain) }
 body { color: var(--ink); font-family: var(--f); font-size: 17px; line-height: 24px; letter-spacing: -.01em; -webkit-font-smoothing: antialiased; overscroll-behavior-y: none }
 button, input, select { font: inherit; color: inherit }
 button { cursor: pointer }
@@ -65,7 +69,8 @@ h2 { font-size: clamp(28px, 7vw, 44px); line-height: 1.15; letter-spacing: -.025
 .row-btns { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
 
 /* uvodna traka na pregledu */
-.band { background: var(--band); color: var(--band-ink); margin-inline: calc(-1 * var(--gut)); margin-top: calc(-18px - env(safe-area-inset-top, 0px)); padding: calc(18px + env(safe-area-inset-top, 0px)) var(--gut) 30px; display: grid; gap: 0; text-align: center }
+.auth .card-tile { margin: 0; width: min(70vw, 240px) }
+.band { background-color: var(--band); background-image: var(--grain-band); color: var(--band-ink); margin-inline: calc(-1 * var(--gut)); margin-top: calc(-18px - env(safe-area-inset-top, 0px)); padding: calc(18px + env(safe-area-inset-top, 0px)) var(--gut) 30px; display: grid; gap: 0; text-align: center }
 .band .top { text-align: left }
 .band .chip { color: var(--band-ink) }
 .band .chip[aria-pressed="true"] { background: #454f3d; color: #ece7d8 }
@@ -144,7 +149,7 @@ section { margin-top: 52px }
 .prev th { font-size: 11px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--taupe) }
 
 /* donja traka */
-.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--bg); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px) }
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background-color: var(--bg); background-image: var(--grain); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px) }
 .tabbar-in { max-width: 920px; margin: 0 auto; height: var(--bar); display: grid; grid-template-columns: repeat(2, minmax(0,1fr)) auto repeat(2, minmax(0,1fr)); align-items: center; gap: 2px; padding-inline: 6px }
 .tab { min-width: 0; border: 0; background: none; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 500; padding: 6px 2px; color: var(--taupe); display: grid; justify-items: center; gap: 4px }
 .tab .ic { width: 22px; height: 22px }
@@ -154,7 +159,7 @@ section { margin-top: 52px }
 
 /* listovi */
 .scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 20 }
-.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--sheet); max-height: 92%; overflow: auto; border-top: 1px solid var(--line); padding: 20px var(--gut) calc(24px + env(safe-area-inset-bottom, 0px)); -webkit-overflow-scrolling: touch }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background-color: var(--sheet); background-image: var(--grain); max-height: 92%; overflow: auto; border-top: 1px solid var(--line); padding: 20px var(--gut) calc(24px + env(safe-area-inset-bottom, 0px)); -webkit-overflow-scrolling: touch }
 .sheet-in { max-width: 760px; margin: 0 auto; display: grid; gap: 16px }
 .sheet h3 { font-size: clamp(22px, 6vw, 30px); letter-spacing: -.02em; line-height: 1.1; overflow-wrap: anywhere }
 .catgrid { display: flex; flex-wrap: wrap; gap: 8px }
@@ -169,8 +174,10 @@ section { margin-top: 52px }
 .irow .meta { grid-column: 1 / -1; font-size: 11px; display: flex; gap: 6px; align-items: center }
 
 /* kamera */
-.cam { position: fixed; inset: 0; z-index: 30; background: #000; display: grid; grid-template-rows: 1fr auto }
-.cam video { width: 100%; height: 100%; object-fit: cover }
+.cam { position: fixed; inset: 0; z-index: 30; background: #000; display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100%; height: 100dvh }
+.cam .view { position: relative; min-height: 0; overflow: hidden }
+.cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover }
+.cam .close { position: absolute; left: var(--gut); top: calc(14px + env(safe-area-inset-top, 0px)); z-index: 2; background: #e3e0d1; color: #1b1813 }
 .cam .frame { position: absolute; left: 50%; top: 42%; width: min(70vw, 340px); aspect-ratio: 1; transform: translate(-50%, -50%); box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); outline: 2px solid #e3e0d1 }
 .cam .hint { position: absolute; left: 0; right: 0; top: calc(42% + min(35vw, 170px) + 18px); text-align: center; color: #e3e0d1; font-size: 15px; padding-inline: 24px }
 .cam .bottom { background: #1b1813; color: #e3e0d1; padding: 16px var(--gut) calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; gap: 10px; justify-content: center }
