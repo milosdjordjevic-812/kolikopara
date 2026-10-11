@@ -697,6 +697,21 @@ layer.addEventListener("click", ev => {
 });
 document.addEventListener("keydown", ev => { if (ev.key === "Escape") { if (document.getElementById("cam")) closeCam(); else if (S.sheet) { S.sheet = null; drawSheet(); } } });
 
+/* ---------- nova verzija ---------- */
+// Telefon često samo vrati app iz pozadine sa starom verzijom. Kad se app vrati na ekran,
+// proveri da li je na adresi novija verzija i, ako ništa nije otvoreno, učitaj je.
+const myBuild = [...document.scripts].map(x => x.src).find(x => /\/assets\/index-[^/]+\.js/.test(x)) || "";
+async function checkUpdate() {
+  if (!myBuild || S.sheet || document.getElementById("cam")) return;
+  try {
+    const t = await (await fetch("/", { cache: "no-store" })).text();
+    const m = t.match(/\/assets\/index-[^"']+\.js/);
+    if (m && !myBuild.endsWith(m[0])) location.reload();
+  } catch (_) {}
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkUpdate(); });
+setTimeout(checkUpdate, 4000);
+
 /* ---------- start ---------- */
 applyTheme(getTheme());
 if (configured) {
