@@ -2,7 +2,7 @@ import "./style.css";
 import { sb, configured, loadAll, saveOverride, deleteOverride, saveRule, deleteRule, insertReceipt, updateReceipt, deleteReceipt, replaceBankRange, importBackup, exportBackup } from "./db.js";
 import { CATS, CAT, catName, derive, totals, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
 import { parseIps, isFiscalUrl } from "./shared/fiscal.js";
-import { startCamera, decodeFile } from "./scan.js";
+import { startCamera } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
 
@@ -522,31 +522,34 @@ async function saveItem() {
 
 /* ---------- skeniranje ---------- */
 let stopCam = null;
+const CAMHINT = {
+  qr: "Uperi kameru u QR kod sa računa ili uplatnice",
+  text: "Za račun čiji QR ne može da se pročita. Slikaj ceo račun ravno i izbliza, pri dobrom svetlu, da se vide artikli i ukupan iznos. Tekst se čita na telefonu.",
+};
 function openScan() {
   closeCam();
-  const cam = document.createElement("div"); cam.className = "cam"; cam.id = "cam";
-  cam.innerHTML = `<div class="view"><video autoplay playsinline muted></video><div class="frame"></div><button class="cta close" data-camclose>[ Nazad ]</button><div class="hint" id="cam-hint">Uperi kameru u QR kod sa računa ili uplatnice</div></div>
+  const cam = document.createElement("div"); cam.className = "cam"; cam.id = "cam"; cam.dataset.mode = "qr";
+  cam.innerHTML = `<div class="view"><video autoplay playsinline muted></video><div class="frame"></div><button class="cta close" data-camclose>[ Nazad ]</button>
+    <div class="hint" id="cam-hint">${CAMHINT.qr}</div>
+    <label class="filebtn shutter"><input type="file" id="cam-text" accept="image/*" capture="environment"><span class="b">[ Slikaj račun ]</span></label></div>
   <div class="bottom">
-    <label class="filebtn"><input type="file" id="cam-text" accept="image/*" capture="environment"><span class="b">Slikaj tekst računa</span></label>
-    <label class="filebtn"><input type="file" id="cam-file" accept="image/*"><span class="b ghost">Iz slike</span></label>
+    <div class="modes"><button class="mode" data-mode="qr" aria-pressed="true">Skeniraj QR</button><button class="mode" data-mode="text" aria-pressed="false">Slikaj tekst računa</button></div>
     <button class="btn" data-manual>Unesi ručno</button>
   </div>`;
   document.body.appendChild(cam);
   const hint = cam.querySelector("#cam-hint");
-  stopCam = startCamera(cam.querySelector("video"), text => handleQr(text), () => { hint.textContent = "Kamera nije dostupna. Dozvoli kameru u podešavanjima ili izaberi sliku računa."; });
-  cam.querySelector("#cam-file").onchange = async ev => {
-    const f = ev.target.files[0]; if (!f) return;
-    hint.textContent = "Čitam sliku";
-    const t = await decodeFile(f);
-    if (t) { handleQr(t); return; }
-    cam._lastFile = f;
-    hint.innerHTML = `Na slici nema QR koda. <button class="btn light" data-ocrlast>Pročitaj tekst sa ove slike</button>`;
-  };
+  // QR se traži u oba načina: ako se ipak pročita, račun ide preko QR koda
+  stopCam = startCamera(cam.querySelector("video"), text => handleQr(text), () => { cam.dataset.nocam = "1"; if (cam.dataset.mode === "qr") hint.textContent = "Kamera nije dostupna. Dozvoli kameru u podešavanjima ili izaberi Slikaj tekst računa."; });
   cam.querySelector("#cam-text").onchange = ev => { const f = ev.target.files[0]; if (f) startOcr(f); };
   cam.addEventListener("click", ev => {
     if (ev.target.closest("[data-camclose]")) closeCam();
     if (ev.target.closest("[data-manual]")) { closeCam(); openManual(); }
-    if (ev.target.closest("[data-ocrlast]") && cam._lastFile) startOcr(cam._lastFile);
+    const m = ev.target.closest("[data-mode]");
+    if (m) {
+      cam.dataset.mode = m.dataset.mode;
+      cam.querySelectorAll("[data-mode]").forEach(b => b.setAttribute("aria-pressed", String(b === m)));
+      hint.textContent = CAMHINT[m.dataset.mode];
+    }
   });
 }
 function closeCam() { if (stopCam) { stopCam(); stopCam = null; } const c = document.getElementById("cam"); if (c) c.remove(); }
@@ -566,7 +569,7 @@ async function handleQr(text) {
       S.sheet = { kind: "result", rc, warn: j.sale === false ? "Ovo nije račun o kupovini (predračun, kopija ili obuka). Ne čuvam ga." : "" };
       drawSheet();
     } catch (e) {
-      if (hint) hint.textContent = e.message + " Skeniraj ponovo, a ako je QR loše odštampan, dodirni Slikaj tekst računa.";
+      if (hint) hint.textContent = e.message + " Skeniraj ponovo, a ako je QR loše odštampan, izaberi Slikaj tekst računa.";
       setTimeout(() => { if (document.getElementById("cam")) { const v = document.querySelector("#cam video"); stopCam = startCamera(v, handleQr, () => {}); } }, 1500);
     }
     return;

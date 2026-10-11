@@ -213,5 +213,12 @@ section { margin-top: 52px }
 .raw summary { cursor: pointer; padding: 4px 0 }
 .raw pre { white-space: pre-wrap; font-size: 12px; line-height: 16px; color: var(--taupe); max-height: 40vh; overflow: auto; margin: 8px 0 0 }
 .filebtn span.b.cta-like { background: var(--cta); color: var(--on-cta); font-size: 15px; padding: 4px 10px }
-.cam .bottom .filebtn span.b.ghost { background: transparent; color: #e3e0d1; box-shadow: inset 0 0 0 1px rgba(227,224,209,.35) }
-.cam .hint .btn.light { display: inline-block; margin-top: 10px; color: #e3e0d1; box-shadow: inset 0 0 0 1px rgba(227,224,209,.6) }
+/* kamera: dva načina, QR i tekst računa */
+.cam .modes { display: grid; grid-template-columns: 1fr 1fr; width: 100%; max-width: 420px; box-shadow: inset 0 0 0 1px rgba(227,224,209,.35) }
+.cam .mode { border: 0; background: transparent; color: #e3e0d1; text-transform: uppercase; font-size: 14px; letter-spacing: -.01em; line-height: 18px; padding: 10px 8px }
+.cam .mode[aria-pressed="true"] { background: #e3e0d1; color: #1b1813 }
+.cam .shutter { display: none; position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 2 }
+.cam .shutter span.b { background: #e3e0d1; color: #1b1813; font-size: 20px; line-height: 26px; padding: 6px 14px; white-space: nowrap }
+.cam[data-mode="text"] .shutter { display: inline-flex }
+.cam[data-mode="text"] .frame { top: 36%; height: 52%; width: auto; aspect-ratio: .62 }
+.cam[data-mode="text"] .hint { top: auto; bottom: 84px; font-size: 14px; line-height: 19px }
