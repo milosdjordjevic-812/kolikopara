@@ -4,6 +4,7 @@ import { CATS, CAT, catName, derive, totals, merchantKey, groupKey, merchantCat,
 import { parseIps, isFiscalUrl } from "./shared/fiscal.js";
 import { startCamera, decodeFile } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
+import { icon, catIcon } from "./icons.js";
 
 /* ---------- pomoćne ---------- */
 const nf0 = new Intl.NumberFormat("sr-Latn-RS", { maximumFractionDigits: 0 });
@@ -20,7 +21,30 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const stavki = n => { const d = n % 10, h = n % 100; return n + " " + (d === 1 && h !== 11 ? "stavka" : (d >= 2 && d <= 4 && (h < 12 || h > 14)) ? "stavke" : "stavki"); };
 const puta = n => n + " " + (n % 10 === 1 && n % 100 !== 11 ? "put" : "puta");
 const PAYNAME = { gotovina: "Gotovina", kartica: "Kartica", racun: "Sa računa" };
-const ICON_SCAN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8V4h4M17 4h4v4M21 16v4h-4M7 20H3v-4"/><path d="M8 12h8"/></svg>`;
+
+/* ---------- tema: sistem, svetla ili tamna ---------- */
+function getTheme() { try { return localStorage.getItem("kp-theme") || "sistem"; } catch (_) { return "sistem"; } }
+function applyTheme(t) {
+  const root = document.documentElement;
+  if (t === "svetla") root.dataset.theme = "light"; else if (t === "tamna") root.dataset.theme = "dark"; else delete root.dataset.theme;
+  const dark = t === "tamna" || (t === "sistem" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.remove());
+  const m = document.createElement("meta"); m.name = "theme-color"; m.content = S.view === "pregled" ? "#73393a" : dark ? "#1b1813" : "#e3e0d2";
+  document.head.appendChild(m);
+}
+function setTheme(t) { try { localStorage.setItem("kp-theme", t); } catch (_) {} applyTheme(t); }
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => applyTheme(getTheme()));
+
+/* ---------- novčanik u uvodnoj traci ---------- */
+let unmountWallet = null;
+function stopWallet() { if (unmountWallet) { unmountWallet(); unmountWallet = null; } }
+function startWallet() {
+  const el = document.getElementById("wallet"); if (!el) return;
+  import("./wallet.js").then(({ mountWallet }) => {
+    if (!document.body.contains(el)) return;
+    stopWallet(); unmountWallet = mountWallet(el);
+  }).catch(() => {});
+}
 
 const S = {
   session: null, ready: false, loadError: null,
@@ -53,8 +77,8 @@ function renderAuth(mode = "in", err = "") {
       <label class="field"><span class="meta dim">Email</span><input id="a-email" type="email" autocomplete="email" required></label>
       <label class="field"><span class="meta dim">Lozinka</span><input id="a-pass" type="password" autocomplete="${mode === "in" ? "current-password" : "new-password"}" minlength="8" required></label>
       ${err ? `<p class="err">${esc(err)}</p>` : ""}
-      <div class="row-btns"><button class="btn" type="submit">${mode === "in" ? "Prijavi se" : "Napravi nalog"}</button>
-      <button class="btn ghost" type="button" id="a-switch">${mode === "in" ? "Prvi put? Napravi nalog" : "Već imam nalog"}</button></div>
+      <div class="row-btns"><button class="cta" type="submit">[ ${mode === "in" ? "Prijavi se" : "Napravi nalog"} ]</button>
+      <button class="btn" type="button" id="a-switch">${mode === "in" ? "Prvi put? Napravi nalog" : "Već imam nalog"}</button></div>
     </form>
   </div>`;
   document.getElementById("a-switch").onclick = () => renderAuth(mode === "in" ? "up" : "in");
@@ -85,6 +109,7 @@ function render() {
   if (!configured) { app.innerHTML = `<div class="auth"><div class="logo">[koliko para]</div><h2>Fale podešavanja</h2><p class="lead">Nedostaju adresa i ključ Supabase baze. Dodaj ih u Vercel podešavanjima kao VITE_SUPABASE_URL i VITE_SUPABASE_ANON_KEY, pa ponovo objavi.</p></div>`; return; }
   if (!S.session) { renderAuth(); tabbar(false); return; }
   tabbar(true);
+  stopWallet(); applyTheme(getTheme());
   if (!S.ready) { app.innerHTML = `<div class="top"><div class="logo">[koliko para]</div></div><div class="empty" style="margin-top:40px"><span class="meta dim">${esc(S.loadError || "Učitavam")}</span></div>`; return; }
   const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore }[S.view];
   v();
@@ -103,8 +128,8 @@ function tabbar(show) {
       if (ev.target.closest("[data-scan]")) openScan();
     });
   }
-  const tab = (id, label) => `<button class="tab" data-view="${id}" ${S.view === id ? 'aria-current="page"' : ""}><span>${label}</span></button>`;
-  bar.innerHTML = `<div class="tabbar-in">${tab("pregled", "Pregled")}${tab("stavke", "Stavke")}<button class="scanbtn" data-scan>${ICON_SCAN}Skeniraj</button>${tab("prolazno", "Prolazno")}${tab("vise", "Više")}</div>`;
+  const tab = (id, label) => `<button class="tab" data-view="${id}" ${S.view === id ? 'aria-current="page"' : ""}>${icon(id, 22)}<span>${label}</span></button>`;
+  bar.innerHTML = `<div class="tabbar-in">${tab("pregled", "Pregled")}${tab("stavke", "Stavke")}<button class="cta scanbtn" data-scan aria-label="Skeniraj račun ili uplatnicu">[ Skeniraj ]</button>${tab("prolazno", "Prolazno")}${tab("vise", "Više")}</div>`;
 }
 function installHint() {
   const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone;
@@ -141,13 +166,16 @@ function renderOverview() {
   const lb = lastBank(), stale = lb && (Date.parse(today()) - Date.parse(lb)) / 864e5 > 10;
   const pending = L.filter(e => e.type === "receipt" && e.pending).length;
 
-  app.innerHTML = `${header()}
-  ${periodChips()}
-  <div class="hero">
-    <div><span class="eyebrow">[${from ? esc(dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
-    <span class="meta">Potrošeno</span>
+  app.innerHTML = `<div class="band">
+    <div class="top"><div class="logo">[koliko para]</div></div>
+    ${installHint()}
+    ${periodChips()}
+    <div style="margin-top:26px"><span class="eyebrow">[${from ? esc(dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
+    <div class="label">Potrošeno</div>
     <h1 class="num">${money(T.spend)}<span class="rsd">RSD</span></h1>
-    <p class="lead">Za ${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno ${money(T.spend / span)} dinara dnevno. Prolazni novac i prebacivanje između tvojih računa nisu uračunati.</p>
+    <div class="wallet" id="wallet"></div>
+    <div class="actions"><button class="cta big" data-scan>[ Skeniraj račun ]</button></div>
+    <p class="sub"><span>${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno</span> ${money(T.spend / span)} dinara dnevno. <span>Bez prolaznog novca i prenosa između tvojih računa.</span></p>
   </div>
   <div class="strip">
     <div><span class="meta dim">Gotovina bez računa</span><span class="v num">${money(T.unexplained)}</span></div>
@@ -161,6 +189,7 @@ function renderOverview() {
     <div class="sec-h"><h2>Na šta</h2><span class="meta dim">Dodirni red za stavke</span></div>
     <div class="rows">${cats.map(x => `
       <button class="crow" data-cat="${x.c.id}">
+        ${catIcon(x.c.id, 24)}
         <span class="name">${esc(x.c.name)}</span>
         <span class="amt num">${money(x.sum)}</span>
         <span class="bar"><i class="${x.c.id === "nerazvrstano" || x.c.id === "gotovina" ? "muted" : ""}" style="width:${(x.sum / max * 100).toFixed(1)}%"></i></span>
@@ -187,6 +216,7 @@ function renderOverview() {
   <section>
     <p class="note">${lb ? `Izvod iz banke je ubačen do ${dShort(lb)}${lb.slice(0, 4)}. ` : "Izvod iz banke još nije ubačen. "}${pending ? `${stavki(pending)} sa računa čeka izvod da bi se uparile. ` : ""}${stale || !lb ? `<button class="chip" aria-pressed="true" data-go="vise">Ubaci izvod</button>` : ""}</p>
   </section>`;
+  startWallet();
 }
 
 /* ---------- stavke ---------- */
@@ -199,7 +229,9 @@ function rowHtml(e) {
   }).join("");
   const doc = e.receipt ? `<span class="tag doc">${e.receipt.kind === "ips" ? "Uplatnica" : e.receipt.kind === "manual" ? "Ručno" : "Račun"}${e.cash ? ", gotovina" : ""}</span>` : "";
   const info = [e.label, e.fee ? "uključena konverzija " + money(-e.fee, true) : "", e.pending ? "čeka izvod" : "", e.rule && !e.manual ? "pravilo: " + e.rule.toLowerCase() : ""].filter(Boolean).join(", ");
+  const main = e.parts[0]?.cat || "nerazvrstano";
   return `<button class="trow" data-edit="${esc(e.id)}">
+    <span class="tic ${main === "nerazvrstano" ? "wait" : main === "prolazno" ? "pass" : ""}">${catIcon(main, 20)}</span>
     <span class="name">${esc(e.name)}</span>
     <span class="amt num ${e.amount > 0 ? "plus" : ""}">${signed(e.amount)}</span>
     <span class="sub">${doc}${tags}${info ? `<span class="meta dim">${esc(info)}</span>` : ""}</span>
@@ -279,7 +311,7 @@ function renderMore() {
       ${rows.length ? `<div class="prev"><table><thead><tr><th>Datum</th><th>Opis</th><th style="text-align:right">Iznos</th></tr></thead><tbody>
         ${rows.slice(0, 6).map(r => `<tr><td class="num">${esc(dShort(r.d) + r.d.slice(0, 4))}</td><td>${esc(r.t)}</td><td class="num" style="text-align:right">${signed(r.a)}</td></tr>`).join("")}</tbody></table></div>
         <p class="note" style="margin:0">${stavki(rows.length)}, ${months.map(k => { const [y, m] = k.split("-"); return MONFULL[+m - 1] + " " + y; }).join(" i ")}.</p>
-        <div><button class="btn" data-doimport ${S.busy ? "disabled" : ""}>${S.busy ? "Uvozim" : "Uvezi " + stavki(rows.length)}</button></div>`
+        <div><button class="cta" data-doimport ${S.busy ? "disabled" : ""}>${S.busy ? "Uvozim" : "[ Uvezi " + stavki(rows.length) + " ]"}</button></div>`
       : `<p class="note" style="margin:0">Nijedan red nema i datum i iznos. Proveri izbor kolona.</p>`}</div>` : ""}
   </section>
 
@@ -291,16 +323,21 @@ function renderMore() {
   </section>
 
   <section>
+    <div class="sec-h"><h2>Izgled</h2></div>
+    <div class="theme">${[["sistem", "Kao telefon", "phone"], ["svetla", "Svetla", "sun"], ["tamna", "Tamna", "moon"]].map(([id, label, ic]) => `<button class="chip" data-theme-set="${id}" aria-pressed="${getTheme() === id}">${icon(ic, 16)}${label}</button>`).join("")}</div>
+  </section>
+
+  <section>
     <div class="sec-h"><h2>Kopija</h2></div>
     <p class="lead">Rezervna kopija svih podataka u jednom fajlu. Isti fajl služi i za prenos podataka iz prve verzije.</p>
     <div class="row-btns" style="margin-top:14px">
       <button class="btn sage" data-export>Sačuvaj kopiju</button>
-      <label class="filebtn"><input type="file" id="bk-file" accept=".json,application/json"><span class="b" style="background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)">Uvezi kopiju</span></label>
+      <label class="filebtn"><input type="file" id="bk-file" accept=".json,application/json"><span class="b ghost">Uvezi kopiju</span></label>
     </div>
   </section>
 
   <section>
-    <div class="row-btns"><button class="btn ghost" data-logout>Odjavi se</button></div>
+    <div class="row-btns"><button class="btn" data-logout>Odjavi se</button></div>
     <p class="note">${esc(S.session?.user?.email || "")}</p>
   </section>`;
 
@@ -354,7 +391,7 @@ function itemsHtml(rc) {
   const items = rc?.items || []; if (!items.length) return "";
   return `<div class="field"><span class="meta">Artikli sa računa</span><div class="items">${items.map((it, i) => {
     const ic = itemCat(S.data.rules, it.name);
-    return `<button class="irow" data-item="${i}"><span class="n">${esc(it.name)}${it.qty && it.qty !== 1 ? ` <span class="dim">x ${String(it.qty).replace(".", ",")}</span>` : ""}</span><span class="a num">${money(it.total, true)}</span><span class="meta dim">${ic ? esc(catName(ic.cat)) : "kao ceo račun"}</span></button>`;
+    return `<button class="irow" data-item="${i}"><span class="n">${esc(it.name)}${it.qty && it.qty !== 1 ? ` <span class="dim">x ${String(it.qty).replace(".", ",")}</span>` : ""}</span><span class="a num">${money(it.total, true)}</span><span class="meta dim">${ic ? catIcon(ic.cat, 14) + esc(catName(ic.cat)) : "kao ceo račun"}</span></button>`;
   }).join("")}</div><p class="note" style="margin:0">Dodirni artikal da mu zadaš kategoriju, npr. cigarete.</p></div>`;
 }
 function drawSheet() {
@@ -372,7 +409,7 @@ function drawSheet() {
     <div class="num" style="font-size:22px;font-weight:500">${signed(e.amount)} RSD</div>
     <div class="meta dim" style="letter-spacing:.04em;text-transform:none">${esc(e.type === "bank" ? e.t : [rc.merchant, rc.store].filter(Boolean).join(", "))}${e.fee ? ", uključena konverzija " + money(-e.fee, true) : ""}${rc && e.type === "bank" ? ", uparen sa računom" : ""}</div>
     ${isRec ? `<div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["gotovina", "kartica", "racun"].map(p => `<button class="chip" data-pay="${p}" aria-pressed="${st.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>` : ""}
-    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.id !== "gotovina" || !isRec).map(c => `<button class="chip" data-setcat="${c.id}" aria-pressed="${st.cat === c.id}">${esc(c.name)}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.id !== "gotovina" || !isRec).map(c => `<button class="chip" data-setcat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
     ${isPass ? `<div class="map">
       <label class="field"><span class="meta">Za koga</span><input id="sh-person" list="sh-people" value="${esc(st.person)}" placeholder="Ime osobe" autocomplete="off"><datalist id="sh-people">${personsList().map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>
       ${isRec ? "" : `<label class="field"><span class="meta">Koliko je prolazno</span><input id="sh-pass" inputmode="decimal" value="${esc(st.pass)}" placeholder="Ceo iznos ${money(e.amount, true)}"></label>`}
@@ -381,10 +418,10 @@ function drawSheet() {
     ${st.applyAll ? `<label class="field"><span class="meta dim">Važi za sve stavke koje sadrže</span><input id="sh-key" class="search" value="${esc(st.key)}"></label>` : ""}
     ${itemsHtml(rc)}
     <div class="row-btns">
-      <button class="btn" data-save>Sačuvaj</button>
-      <button class="btn ghost" data-close>Otkaži</button>
-      ${e.type === "bank" && S.data.overrides[e.id] ? `<button class="btn ghost" data-reset>Vrati na automatski</button>` : ""}
-      ${rc ? `<button class="btn ghost" data-delreceipt>${st.confirmDel ? "Sigurno obriši " + (rc.kind === "ips" ? "uplatnicu" : "račun") : "Obriši " + (rc.kind === "ips" ? "uplatnicu" : rc.kind === "manual" ? "unos" : "račun")}</button>` : ""}
+      <button class="cta" data-save>[ Sačuvaj ]</button>
+      <button class="btn" data-close>Otkaži</button>
+      ${e.type === "bank" && S.data.overrides[e.id] ? `<button class="btn" data-reset>Vrati na automatski</button>` : ""}
+      ${rc ? `<button class="btn" data-delreceipt>${st.confirmDel ? "Sigurno obriši " + (rc.kind === "ips" ? "uplatnicu" : "račun") : "Obriši " + (rc.kind === "ips" ? "uplatnicu" : rc.kind === "manual" ? "unos" : "račun")}</button>` : ""}
     </div>
   </div></div>`;
   document.getElementById("sh-all").onchange = ev => { readInputs(); st.applyAll = ev.target.checked; drawSheet(); };
@@ -450,9 +487,9 @@ function drawItemSheet() {
     <span class="meta dim">Artikal</span>
     <h3>${esc(st.it.name)}</h3>
     <div class="num" style="font-size:20px;font-weight:500">${money(st.it.total, true)} RSD</div>
-    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina").map(c => `<button class="chip" data-icat="${c.id}" aria-pressed="${st.cat === c.id}">${esc(c.name)}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina").map(c => `<button class="chip" data-icat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
     <label class="field"><span class="meta">Važi za sve artikle koji sadrže</span><input id="it-key" class="search" value="${esc(st.key)}"></label>
-    <div class="row-btns"><button class="btn" data-isave>Sačuvaj</button><button class="btn ghost" data-back>Nazad</button></div>
+    <div class="row-btns"><button class="cta" data-isave>[ Sačuvaj ]</button><button class="btn" data-back>Nazad</button></div>
   </div></div>`;
 }
 async function saveItem() {
@@ -475,8 +512,8 @@ function openScan() {
   cam.innerHTML = `<video autoplay playsinline muted></video><div class="frame"></div><div class="hint" id="cam-hint">Uperi kameru u QR kod sa računa ili uplatnice</div>
   <div class="bottom">
     <label class="filebtn"><input type="file" id="cam-file" accept="image/*"><span class="b">Iz slike</span></label>
-    <button class="btn ghost" data-manual>Unesi ručno</button>
-    <button class="btn ghost" data-camclose>Zatvori</button>
+    <button class="btn" data-manual>Unesi ručno</button>
+    <button class="btn" data-camclose>Zatvori</button>
   </div>`;
   document.body.appendChild(cam);
   const hint = cam.querySelector("#cam-hint");
@@ -538,10 +575,10 @@ function drawResult() {
       : `<div class="meta dim">${esc(dDay(rc.issued_at))}${rc.merchant && rc.store ? ", " + esc(rc.merchant) : ""}</div>`}
     ${st.warn ? `<p class="err">${esc(st.warn)}</p>` : ""}
     <div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["gotovina", "kartica", "racun"].map(p => `<button class="chip" data-rpay="${p}" aria-pressed="${rc.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>
-    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.id !== "gotovina").map(c => `<button class="chip" data-rcat="${c.id}" aria-pressed="${base === c.id}">${esc(c.name)}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.id !== "gotovina").map(c => `<button class="chip" data-rcat="${c.id}" aria-pressed="${base === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
     ${base === "prolazno" ? `<label class="field"><span class="meta">Za koga</span><input id="r-person" list="r-people" value="${esc(rc.person)}" autocomplete="off"><datalist id="r-people">${personsList().map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>` : ""}
     ${itemsHtml(rc)}
-    <div class="row-btns"><button class="btn" data-rsave ${st.warn ? "disabled" : ""}>Sačuvaj</button><button class="btn ghost" data-close>Odbaci</button></div>
+    <div class="row-btns"><button class="cta" data-rsave ${st.warn ? "disabled" : ""}>[ Sačuvaj ]</button><button class="btn" data-close>Odbaci</button></div>
   </div></div>`;
 }
 async function saveResult() {
@@ -573,10 +610,10 @@ function drawManual() {
       <label class="field"><span class="meta">Datum</span><input id="m-date" type="date" value="${esc(st.date)}"></label>
     </div>
     <div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["gotovina", "kartica", "racun"].map(p => `<button class="chip" data-mpay="${p}" aria-pressed="${st.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>
-    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina" || c.id === "prolazno").map(c => `<button class="chip" data-mcat="${c.id}" aria-pressed="${st.cat === c.id}">${esc(c.name)}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina" || c.id === "prolazno").map(c => `<button class="chip" data-mcat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
     ${st.cat === "prolazno" ? `<label class="field"><span class="meta">Za koga</span><input id="m-person" list="m-people" value="${esc(st.person)}" autocomplete="off"><datalist id="m-people">${personsList().map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>` : ""}
     <p class="note" style="margin:0">Gotovina se odbija od podignutog novca. Kartica i sa računa se uparuju sa izvodom, pa se ne računaju dva puta.</p>
-    <div class="row-btns"><button class="btn" data-msave>Sačuvaj</button><button class="btn ghost" data-close>Otkaži</button></div>
+    <div class="row-btns"><button class="cta" data-msave>[ Sačuvaj ]</button><button class="btn" data-close>Otkaži</button></div>
   </div></div>`;
 }
 function readManual() {
@@ -604,6 +641,8 @@ app.addEventListener("click", async ev => {
   if (t.closest("[data-clear]")) { S.cat = null; render(); return; }
   const e = t.closest("[data-edit]"); if (e) { openEdit(e.dataset.edit); return; }
   const g = t.closest("[data-go]"); if (g) { S.view = g.dataset.go; render(); window.scrollTo(0, 0); return; }
+  if (t.closest("[data-scan]")) { openScan(); return; }
+  const th = t.closest("[data-theme-set]"); if (th) { setTheme(th.dataset.themeSet); render(); return; }
   if (t.closest("[data-dismiss-install]")) { try { localStorage.setItem("kp-install", "1"); } catch (_) {} render(); return; }
   const dr = t.closest("[data-delrule]");
   if (dr) {
@@ -641,6 +680,7 @@ layer.addEventListener("click", ev => {
 document.addEventListener("keydown", ev => { if (ev.key === "Escape") { if (document.getElementById("cam")) closeCam(); else if (S.sheet) { S.sheet = null; drawSheet(); } } });
 
 /* ---------- start ---------- */
+applyTheme(getTheme());
 if (configured) {
   sb.auth.getSession().then(({ data }) => { S.session = data.session; render(); if (S.session) load(); });
   sb.auth.onAuthStateChange((evt, session) => {
