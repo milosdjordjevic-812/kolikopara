@@ -111,7 +111,7 @@ function render() {
   if (!configured) { app.innerHTML = `<div class="auth"><div class="logo">[kolko para?]</div><h2>Fale podešavanja</h2><p class="lead">Nedostaju adresa i ključ Supabase baze. Dodaj ih u Vercel podešavanjima kao VITE_SUPABASE_URL i VITE_SUPABASE_ANON_KEY, pa ponovo objavi.</p></div>`; return; }
   if (!S.session) { stopWallet(); renderAuth(); tabbar(false); return; }
   tabbar(true);
-  stopWallet(); applyTheme(getTheme());
+  stopWallet(); applyTheme(getTheme()); app.classList.remove("is-empty");
   if (!S.ready) { app.innerHTML = `<div class="top"><div class="logo">[kolko para?]</div></div><div class="empty" style="margin-top:40px"><span class="meta dim">${esc(S.loadError || "Učitavam")}</span></div>`; return; }
   const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore }[S.view];
   v();
@@ -149,13 +149,16 @@ function periodChips() {
 function renderOverview() {
   const all = list();
   if (!all.length) {
-    app.innerHTML = `<div class="band">
+    app.classList.add("is-empty");
+    app.innerHTML = `<div class="band fill">
       <div class="top"><div class="logo">[kolko para?]</div></div>
       ${installHint()}
-      <div style="margin-top:30px"><span class="eyebrow">[još nema stavki]</span></div>
-      <div class="wallet card-tile" id="card"></div>
-      <div class="actions"><button class="cta big" data-scan>[ Skeniraj prvi račun ]</button></div>
-      <p class="sub"><span>Ili u delu Više ubaci</span> izvod iz e-bankinga <span>ili rezervnu kopiju.</span></p>
+      <div class="mid">
+        <div><span class="eyebrow">[još nema stavki]</span></div>
+        <div class="wallet card-tile" id="card"></div>
+        <div class="actions"><button class="cta big" data-scan>[ Skeniraj prvi račun ]</button></div>
+        <p class="sub"><span>Ili u delu Više ubaci</span> izvod iz e-bankinga <span>ili rezervnu kopiju.</span></p>
+      </div>
     </div>`;
     startWallet();
     return;
