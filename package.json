@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "2.45.4",
     "jsqr": "1.4.0",
+    "tesseract.js": "7.0.0",
     "three": "^0.169.0"
   },
   "devDependencies": {

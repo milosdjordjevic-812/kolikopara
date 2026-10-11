@@ -415,6 +415,8 @@ function drawSheet() {
   if (st.kind === "item") return drawItemSheet();
   if (st.kind === "result") return drawResult();
   if (st.kind === "manual") return drawManual();
+  if (st.kind === "ocrwait") return drawOcrWait();
+  if (st.kind === "ocr") return drawOcr();
   const e = st.e, rc = e.receipt, isPass = st.cat === "prolazno", isRec = e.type === "receipt";
   layer.innerHTML = `<div class="scrim" data-close></div>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t"><div class="sheet-in">
@@ -525,7 +527,8 @@ function openScan() {
   const cam = document.createElement("div"); cam.className = "cam"; cam.id = "cam";
   cam.innerHTML = `<div class="view"><video autoplay playsinline muted></video><div class="frame"></div><button class="cta close" data-camclose>[ Nazad ]</button><div class="hint" id="cam-hint">Uperi kameru u QR kod sa računa ili uplatnice</div></div>
   <div class="bottom">
-    <label class="filebtn"><input type="file" id="cam-file" accept="image/*"><span class="b">Iz slike</span></label>
+    <label class="filebtn"><input type="file" id="cam-text" accept="image/*" capture="environment"><span class="b">Slikaj tekst računa</span></label>
+    <label class="filebtn"><input type="file" id="cam-file" accept="image/*"><span class="b ghost">Iz slike</span></label>
     <button class="btn" data-manual>Unesi ručno</button>
   </div>`;
   document.body.appendChild(cam);
@@ -535,11 +538,15 @@ function openScan() {
     const f = ev.target.files[0]; if (!f) return;
     hint.textContent = "Čitam sliku";
     const t = await decodeFile(f);
-    if (t) handleQr(t); else hint.textContent = "Na slici nije pronađen QR kod. Probaj oštriju sliku, bliže kodu.";
+    if (t) { handleQr(t); return; }
+    cam._lastFile = f;
+    hint.innerHTML = `Na slici nema QR koda. <button class="btn light" data-ocrlast>Pročitaj tekst sa ove slike</button>`;
   };
+  cam.querySelector("#cam-text").onchange = ev => { const f = ev.target.files[0]; if (f) startOcr(f); };
   cam.addEventListener("click", ev => {
     if (ev.target.closest("[data-camclose]")) closeCam();
     if (ev.target.closest("[data-manual]")) { closeCam(); openManual(); }
+    if (ev.target.closest("[data-ocrlast]") && cam._lastFile) startOcr(cam._lastFile);
   });
 }
 function closeCam() { if (stopCam) { stopCam(); stopCam = null; } const c = document.getElementById("cam"); if (c) c.remove(); }
@@ -554,11 +561,12 @@ async function handleQr(text) {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Račun nije pročitan.");
       closeCam();
+      if (j.issuedAt && sameReceipt(j.issuedAt, Math.abs(j.total))) { toast("Ovaj račun je već sačuvan."); return; }
       const rc = { kind: "fiscal", source_url: text.trim(), issued_at: j.issuedAt || today() + "T12:00:00", merchant: j.merchant || "", store: j.store || "", total: Math.abs(j.total), payment: j.payment || "kartica", refund: !!j.refund, items: j.items || [], journal: j.journal || null, cat: null, person: "" };
       S.sheet = { kind: "result", rc, warn: j.sale === false ? "Ovo nije račun o kupovini (predračun, kopija ili obuka). Ne čuvam ga." : "" };
       drawSheet();
     } catch (e) {
-      if (hint) hint.textContent = e.message + " Skeniraj ponovo ili zatvori.";
+      if (hint) hint.textContent = e.message + " Skeniraj ponovo, a ako je QR loše odštampan, dodirni Slikaj tekst računa.";
       setTimeout(() => { if (document.getElementById("cam")) { const v = document.querySelector("#cam video"); stopCam = startCamera(v, handleQr, () => {}); } }, 1500);
     }
     return;
@@ -603,12 +611,125 @@ async function saveResult() {
   const { _ips, ...row } = rc;
   const saved = await guard(() => insertReceipt(row));
   if (!saved) return;
+  afterSaved(saved);
+}
+function afterSaved(saved) {
   S.data.receipts.push(saved);
   S.sheet = null; drawSheet();
   cache = null;
   const e = list().find(x => x.receipt && x.receipt.id === saved.id);
-  toast(e && e.type === "bank" ? "Sačuvano i upareno sa stavkom iz banke" : rc.payment === "gotovina" ? "Sačuvano kao trošak gotovinom" : "Sačuvano, upariće se kad ubaciš izvod");
+  toast(e && e.type === "bank" ? "Sačuvano i upareno sa stavkom iz banke" : saved.payment === "gotovina" ? "Sačuvano kao trošak gotovinom" : "Sačuvano, upariće se kad ubaciš izvod");
   S.period = String(saved.issued_at).slice(0, 7); render();
+}
+// isti račun: isto vreme do minuta i isti iznos
+const sameReceipt = (iso, total) => S.data.receipts.some(r => r.kind === "fiscal" && String(r.issued_at).slice(0, 16) === String(iso).slice(0, 16) && Math.abs(Math.abs(r.total) - total) < 0.01);
+
+/* ---------- račun pročitan sa slike (tekst, bez QR koda) ---------- */
+const amtStr = n => nf2.format(Math.abs(n || 0));
+async function startOcr(file) {
+  closeCam();
+  S.sheet = { kind: "ocrwait", msg: "Pripremam sliku", pr: 0 }; drawSheet();
+  const mine = S.sheet;
+  try {
+    const { readReceiptPhoto } = await import("./ocr.js");
+    const r = await readReceiptPhoto(file, (msg, pr) => {
+      if (S.sheet !== mine) return;
+      mine.msg = msg; mine.pr = pr || 0;
+      const m = document.getElementById("ow-msg"), b = document.getElementById("ow-bar");
+      if (m) m.textContent = msg; if (b) b.style.transform = `scaleX(${Math.max(0.03, mine.pr)})`;
+    });
+    if (S.sheet !== mine) return;                     // korisnik je zatvorio
+    if (!r.totalFound && !r.items.length) {
+      S.sheet = { kind: "ocrwait", fail: "Nisam uspeo da pročitam račun sa ove slike. Slikaj ga ravno, izbliza i pri dobrom svetlu, tako da se vide artikli i ukupan iznos.", text: r.text };
+      drawSheet(); return;
+    }
+    const iso = r.issuedAt || today() + "T12:00:00";
+    const rc = { merchant: r.merchant || "", store: r.store || r.merchant || "", issued_at: iso, total: Math.abs(r.total) || 0,
+      payment: r.payment || "kartica", refund: !!r.refund, cat: null, person: "",
+      items: r.items.map(i => ({ ...i, total: Math.abs(i.total), orig: Math.abs(i.total) })) };
+    S.sheet = { kind: "ocr", rc, text: r.text, dateFound: !!r.issuedAt, totalFound: r.totalFound, notSale: r.sale === false };
+  } catch (e) {
+    console.error(e);
+    if (S.sheet !== mine) return;
+    S.sheet = { kind: "ocrwait", fail: "Čitanje nije uspelo. Prvi put je potreban internet da se preuzme srpski jezik. Proveri vezu i probaj ponovo." };
+  }
+  drawSheet();
+}
+function drawOcrWait() {
+  const st = S.sheet;
+  layer.innerHTML = `<div class="scrim" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-live="polite"><div class="sheet-in">
+    <span class="meta dim">Račun sa slike</span>
+    ${st.fail ? `<h3>Nije pročitano</h3><p class="note" style="margin:0">${esc(st.fail)}</p>
+      <div class="row-btns"><label class="filebtn"><input type="file" id="o-retake" accept="image/*" capture="environment"><span class="b cta-like">[ Slikaj ponovo ]</span></label><button class="btn" data-omanual>Unesi ručno</button><button class="btn" data-close>Zatvori</button></div>`
+    : `<h3 id="ow-msg">${esc(st.msg)}</h3><div class="obar"><i id="ow-bar" style="transform:scaleX(${Math.max(0.03, st.pr || 0)})"></i></div>
+      <p class="note" style="margin:0">Čitam na telefonu, bez slanja na internet. Traje nekoliko sekundi.</p>
+      <div class="row-btns"><button class="btn" data-close>Otkaži</button></div>`}
+  </div></div>`;
+}
+function readOcr() {
+  const st = S.sheet, rc = st.rc, g = id => document.getElementById(id);
+  if (g("o-store")) rc.store = g("o-store").value.trim();
+  if (g("o-date") && g("o-date").value) rc.issued_at = g("o-date").value + "T" + ((g("o-time") && g("o-time").value) || rc.issued_at.slice(11, 16) || "12:00").slice(0, 5) + ":" + (rc.issued_at.slice(17, 19) || "00");
+  if (g("o-total")) { const v = Math.abs(parseAmt(g("o-total").value)); rc.total = isFinite(v) ? v : 0; }
+  if (g("o-person")) rc.person = g("o-person").value.trim();
+  layer.querySelectorAll("[data-oname]").forEach(el => { const it = rc.items[+el.dataset.oname]; if (it) it.name = el.value.trim(); });
+  layer.querySelectorAll("[data-oamt]").forEach(el => {
+    const it = rc.items[+el.dataset.oamt]; if (!it) return;
+    const v = Math.abs(parseAmt(el.value)); it.total = isFinite(v) ? v : 0;
+    if (Math.abs(it.total - it.orig) > 0.004) { it.price = it.total; it.qty = 1; it.check = false; }
+  });
+}
+function drawOcr() {
+  const st = S.sheet, rc = st.rc;
+  const base = rc.cat || merchantCat(S.data.rules, rc.merchant + " " + rc.store, -1).cat;
+  const sum = rc.items.reduce((s, i) => s + (i.total || 0), 0), diff = Math.round((rc.total - sum) * 100) / 100;
+  const sumLine = !rc.items.length ? `<p class="note" style="margin:0">Artikli nisu pročitani. Možeš da ih dopišeš ili da sačuvaš samo ukupan iznos.</p>`
+    : Math.abs(diff) < 0.01 ? `<p class="okline">${icon("check", 16)} Zbir artikala se slaže sa ukupnim iznosom.</p>`
+    : `<p class="err">Zbir artikala je ${amtStr(sum)}, a ukupno ${amtStr(rc.total)}. ${diff > 0 ? "Fali " + amtStr(diff) + ": neki artikal nije pročitan, dopiši ga." : "Višak " + amtStr(-diff) + ": proveri iznose artikala."}</p>`;
+  layer.innerHTML = `<div class="scrim" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="o-t"><div class="sheet-in">
+    <span class="meta dim">Račun pročitan sa slike, proveri pre čuvanja</span>
+    <h3 id="o-t">${esc(rc.store || rc.merchant || "Račun")}</h3>
+    ${st.notSale ? `<p class="err">Na računu piše da nije prodaja (predračun, kopija ili obuka). Sačuvaj ga samo ako je to greška u čitanju.</p>` : ""}
+    <div class="map">
+      <label class="field"><span class="meta">Prodavnica</span><input id="o-store" value="${esc(rc.store)}" placeholder="npr. Maxi"></label>
+      <label class="field"><span class="meta">Ukupno${st.totalFound ? "" : ", upiši"}</span><input id="o-total" inputmode="decimal" value="${rc.total ? esc(amtStr(rc.total)) : ""}" placeholder="0,00"></label>
+      <label class="field"><span class="meta">Datum${st.dateFound ? "" : ", proveri"}</span><input id="o-date" type="date" value="${esc(rc.issued_at.slice(0, 10))}"></label>
+      <label class="field"><span class="meta">Vreme</span><input id="o-time" type="time" value="${esc(rc.issued_at.slice(11, 16))}"></label>
+    </div>
+    <div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["gotovina", "kartica", "racun"].map(p => `<button class="chip" data-opay="${p}" aria-pressed="${rc.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.id !== "gotovina").map(c => `<button class="chip" data-ocat="${c.id}" aria-pressed="${base === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
+    ${base === "prolazno" ? `<label class="field"><span class="meta">Za koga</span><input id="o-person" list="o-people" value="${esc(rc.person)}" autocomplete="off"><datalist id="o-people">${personsList().map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>` : ""}
+    <div class="field"><span class="meta">Artikli</span>
+      <div class="oitems">${rc.items.map((it, i) => `<div class="orow${it.check ? " chk" : ""}">
+        <textarea data-oname="${i}" rows="${(it.name || "").length > 24 ? 2 : 1}" aria-label="Naziv artikla" placeholder="Naziv">${esc(it.name)}</textarea>
+        <input data-oamt="${i}" inputmode="decimal" value="${it.total ? esc(amtStr(it.total)) : ""}" aria-label="Iznos" placeholder="0,00">
+        <button class="x" data-odel="${i}" aria-label="Ukloni artikal">×</button>
+        ${it.qty && it.qty !== 1 ? `<span class="q meta dim">${String(it.qty).replace(".", ",")} x ${amtStr(it.price)}</span>` : ""}
+        ${it.check ? `<span class="q meta">Proveri iznos</span>` : ""}
+      </div>`).join("")}</div>
+      <div><button class="btn" data-oadd>+ Dodaj artikal</button></div>
+      ${sumLine}
+    </div>
+    <details class="raw"><summary class="meta dim">Pročitan tekst</summary><pre>${esc(st.text || "")}</pre></details>
+    <div class="row-btns"><button class="cta" data-osave>[ Sačuvaj ]</button><button class="btn" data-close>Odbaci</button></div>
+  </div></div>`;
+}
+async function saveOcr() {
+  readOcr();
+  const st = S.sheet, rc = st.rc;
+  if (!(rc.total > 0)) { toast("Upiši ukupan iznos sa računa"); return; }
+  const base = rc.cat || merchantCat(S.data.rules, rc.merchant + " " + rc.store, -1).cat;
+  if (base === "prolazno" && !rc.person) { toast("Upiši za koga je ovaj novac"); return; }
+  if (sameReceipt(rc.issued_at, rc.total)) { toast("Ovaj račun je već sačuvan."); return; }
+  const items = rc.items.filter(i => i.name && i.total > 0).map(i => ({ name: i.name, price: i.price || i.total, qty: i.qty || 1, total: rc.refund ? -i.total : i.total }));
+  const row = { kind: "fiscal", source_url: "ocr:" + rc.issued_at.slice(0, 16) + "|" + rc.total.toFixed(2), qr_text: null,
+    issued_at: rc.issued_at, merchant: rc.merchant || rc.store, store: rc.store, total: rc.total, payment: rc.payment, refund: rc.refund,
+    items, journal: st.text || null, cat: rc.cat || null, person: base === "prolazno" ? rc.person : "" };
+  const saved = await guard(() => insertReceipt(row));
+  if (!saved) return;
+  afterSaved(saved);
 }
 
 function openManual() { S.sheet = { kind: "manual", cat: "nerazvrstano", payment: "gotovina", desc: "", amount: "", date: today(), person: "" }; drawSheet(); }
@@ -689,6 +810,25 @@ layer.addEventListener("click", ev => {
   const mp = t.closest("[data-mpay]"); if (mp) { readManual(); st.payment = mp.dataset.mpay; drawSheet(); return; }
   const mc = t.closest("[data-mcat]"); if (mc) { readManual(); st.cat = mc.dataset.mcat; drawSheet(); return; }
   if (t.closest("[data-msave]")) { saveManual(); return; }
+  if (st.kind === "ocr") {
+    const op = t.closest("[data-opay]"); if (op) { readOcr(); st.rc.payment = op.dataset.opay; drawSheet(); return; }
+    const oc = t.closest("[data-ocat]"); if (oc) { readOcr(); st.rc.cat = oc.dataset.ocat; drawSheet(); return; }
+    const od = t.closest("[data-odel]"); if (od) { readOcr(); st.rc.items.splice(+od.dataset.odel, 1); drawSheet(); return; }
+    if (t.closest("[data-oadd]")) {
+      readOcr(); st.rc.items.push({ name: "", price: 0, qty: 1, total: 0, orig: 0 }); drawSheet();
+      const ins = layer.querySelectorAll("[data-oname]"); if (ins.length) ins[ins.length - 1].focus();
+      return;
+    }
+    if (t.closest("[data-osave]")) { saveOcr(); return; }
+  }
+  if (t.closest("[data-omanual]")) { openManual(); return; }
+});
+layer.addEventListener("change", ev => {
+  if (ev.target.id === "o-retake" && ev.target.files[0]) { startOcr(ev.target.files[0]); return; }
+  // zbir artikala se osveži kad se promeni iznos
+  if (S.sheet?.kind === "ocr" && (ev.target.matches("[data-oamt]") || ev.target.id === "o-total")) {
+    const y = layer.querySelector(".sheet").scrollTop; readOcr(); drawSheet(); layer.querySelector(".sheet").scrollTop = y;
+  }
 });
 document.addEventListener("keydown", ev => { if (ev.key === "Escape") { if (document.getElementById("cam")) closeCam(); else if (S.sheet) { S.sheet = null; drawSheet(); } } });
 

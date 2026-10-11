@@ -26,7 +26,8 @@ U appu otvori **Više**, pa **Uvezi kopiju**, i izaberi fajl `koliko-para-migrac
 
 ## Svaki mesec
 - Izvezi promet tekućeg računa iz web e-bankinga (Excel ili CSV) i ubaci ga u **Više**, **Izvod**.
-- Između toga skeniraj račune i uplatnice. Plaćeno karticom se samo upari sa izvodom kad ga ubaciš, plaćeno gotovinom se odbija od podignute gotovine.
+- Između toga skeniraj račune i uplatnice. Ako je QR kod loše odštampan, dodirni **Slikaj tekst računa**: app pročita artikle i iznose sa slike, na samom telefonu, a ti proveriš i ispraviš pre čuvanja.
+  Plaćeno karticom se samo upari sa izvodom kad ga ubaciš, plaćeno gotovinom se odbija od podignute gotovine.
 
 ## Za razvoj
 ```

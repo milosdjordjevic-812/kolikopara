@@ -196,3 +196,22 @@ section { margin-top: 52px }
 .theme .chip { box-shadow: inset 0 0 0 1px var(--line); padding: 6px 10px }
 @media (prefers-reduced-motion: no-preference) { .bar i { transition: width .5s cubic-bezier(.2,.7,.2,1) } }
 @media (max-width: 520px) { .pnums { grid-template-columns: 1fr 1fr } .pnums > div:last-child { grid-column: 1 / -1 } }
+
+/* račun pročitan sa slike */
+.obar { height: 2px; background: var(--line); overflow: hidden }
+.obar i { display: block; height: 100%; background: var(--ink); transform-origin: left; transition: transform .3s ease }
+.oitems { border-top: 1px solid var(--line) }
+.orow { display: grid; grid-template-columns: minmax(0,1fr) 7.5em 28px; gap: 4px 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line) }
+.orow input, .orow textarea { font-family: inherit; line-height: 21px; resize: none; border: 0; border-bottom: 1px solid transparent; background: transparent; padding: 6px 0; border-radius: 0; font-size: 16px; min-width: 0; width: 100%; color: var(--ink) }
+.orow input:focus, .orow textarea:focus { outline: none; border-bottom-color: var(--ink) }
+.orow input[data-oamt] { text-align: right; font-variant-numeric: tabular-nums }
+.orow .x { border: 0; background: transparent; color: var(--taupe); font-size: 22px; line-height: 1; padding: 0; width: 28px; height: 28px }
+.orow .q { grid-column: 1 / -1; font-size: 11px; margin-top: -4px }
+.orow.chk input[data-oamt] { border-bottom-color: var(--wine) }
+.orow.chk .q:last-child { color: var(--wine) }
+.okline { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 15px; color: var(--sage) }
+.raw summary { cursor: pointer; padding: 4px 0 }
+.raw pre { white-space: pre-wrap; font-size: 12px; line-height: 16px; color: var(--taupe); max-height: 40vh; overflow: auto; margin: 8px 0 0 }
+.filebtn span.b.cta-like { background: var(--cta); color: var(--on-cta); font-size: 15px; padding: 4px 10px }
+.cam .bottom .filebtn span.b.ghost { background: transparent; color: #e3e0d1; box-shadow: inset 0 0 0 1px rgba(227,224,209,.35) }
+.cam .hint .btn.light { display: inline-block; margin-top: 10px; color: #e3e0d1; box-shadow: inset 0 0 0 1px rgba(227,224,209,.6) }
