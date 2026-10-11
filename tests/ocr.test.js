@@ -65,3 +65,28 @@ Cigarete (Đ)
 Ukupan iznos: 966,00`);
   assert.equal(r.items[0].check, true);
 });
+
+test("jedan artikal, cifre pročitane kao slova, prodavnica samo u zaglavlju", () => {
+  const r = parseOcrText(`UNIVEREXPORT
+============ ФИСКАЛНИ РАЧУН ============
+Артикли
+Назив Цена Кол. Укупно
+DAVIDOFF GOLD SLIMS (Ђ)
+                 52O,0O     l    52O,OO
+Укупан износ: 520,00
+Готовина: 1.000,00`);
+  assert.equal(r.store, "Univerexport");
+  assert.deepEqual(r.items.map(i => [i.name, i.total]), [["DAVIDOFF GOLD SLIMS", 520]]);
+  assert.equal(r.payment, "gotovina");
+});
+
+test("artikal koji ne prođe proveru, a jedini je na računu, ponudi se za proveru", () => {
+  const r = parseOcrText(`Univerexport
+Ukupno
+Davidoff Gold
+520,00 520,00 3
+Ukupan iznos: 520,00`);
+  assert.equal(r.items.length, 1);
+  assert.equal(r.items[0].total, 520);
+  assert.equal(r.items[0].check, true);
+});

@@ -46,6 +46,8 @@ function isLabel(line, key, tol = Math.floor(key.length / 4)) {
 const DIGITISH = { O: "0", o: "0", О: "0", о: "0", D: "0", I: "1", l: "1", "|": "1", І: "1", З: "3", Б: "6", б: "6", B: "8", В: "8", S: "5", s: "5", Z: "2" };
 function fixToken(t) {
   if (!/\d/.test(t)) return t;
+  // broj u kome su neke cifre pročitane kao slova: 52O,OO -> 520,00 (sve što nije cifra mora da liči na cifru)
+  if ([...t].every(c => /[\d.,\-]/.test(c) || c in DIGITISH)) return t.replace(/[^\d.,\-]/g, c => DIGITISH[c]);
   const digits = (t.match(/\d/g) || []).length;
   if (digits < Math.max(1, t.replace(/[.,\-]/g, "").length - 2)) return t;   // pretežno slova, nije broj
   return t.replace(/[^\d.,\-]/g, c => DIGITISH[c] ?? "");
@@ -76,6 +78,8 @@ function tailNumbers(line) {
   let i = toks.length - 1;
   while (i >= 0 && out.length < 4) {
     if (/^[^\p{L}\d]+$/u.test(toks[i])) { i--; continue; }      // tačka ili crtica između brojeva
+    // jedno slovo između brojeva je cifra: "520,00 l 520,00" (l = 1)
+    if (out.length && i > 0 && toks[i].length === 1 && toks[i] in DIGITISH && ocrNum(fixToken(toks[i - 1]))) toks[i] = DIGITISH[toks[i]];
     const n = ocrNum(toks[i]);
     if (!n) break;
     out.unshift(n); i--;
@@ -183,10 +187,51 @@ export function parseOcrText(raw) {
       name.push(line); if (name.length > 2) name.shift();
     }
   }
+  // nijedan artikal nije prošao proveru: probaj redove sa iznosom (jedan artikal od celog iznosa je čest slučaj)
+  if (!out.items.length && out.totalFound) {
+    const from = start >= 0 ? start + 1 : 0, to = totIdx >= 0 ? totIdx : lines.length;
+    const cands = []; let lastText = "";
+    for (let i = from; i < to; i++) {
+      const line = lines[i];
+      if (SEP.test(line)) continue;
+      const { nums, text } = tailNumbers(line);
+      const own = /\p{L}{3}/u.test(text) && !text.includes(":") ? text : "";
+      const amt = nums.filter(n => n.dec === 2).pop();
+      if (amt && Math.abs(amt.v) > 0 && Math.abs(amt.v) <= out.total + 0.01) cands.push({ name: cleanName(own || lastText) || "Artikal", total: Math.abs(amt.v) });
+      if (own && !amt) lastText = own; else if (own) lastText = "";
+    }
+    const one = cands.filter(c => close(c.total, out.total));
+    const csum = cands.reduce((s, c) => s + c.total, 0);
+    const pick = one.length ? [one[one.length - 1]] : close(csum, out.total) ? cands : [];
+    out.items = pick.map(c => ({ name: c.name, price: c.total, qty: 1, total: out.refund ? -c.total : c.total, check: true }));
+  }
+
+  // prodavnica: ako redovi "Preduzeće" i "Mesto prodaje" nisu pročitani, poznat trgovac bilo gde
+  // u gornjem delu računa, pa prvi red sa tekstom iznad "Fiskalni račun"
+  if (!out.merchant && !out.store) {
+    const top = lines.slice(0, Math.max(6, start > 0 ? start : Math.ceil(lines.length / 2)));
+    const brand = top.map(l => [fold(l), looks(l), back(l)].join(" ")).map(v => STORES.find(([re]) => re.test(v))).find(Boolean);
+    if (brand) out.store = brand[1];
+    else {
+      const fr = lines.findIndex(l => /FISKAL/.test(fold(l)) || /FISKAL/.test(looks(l)));
+      const head = (fr > 0 ? lines.slice(0, fr) : lines.slice(0, 3)).find(l => /\p{L}{4}/u.test(l) && !l.includes(":") && !SEP.test(l));
+      if (head) out.store = cleanName(head);
+    }
+  }
   const sum = out.items.reduce((s, i) => s + Math.abs(i.total), 0);
   if (!out.totalFound && sum > 0) out.total = Math.round(sum * 100) / 100;
   return out;
 }
+
+// poznati trgovci u Srbiji, da se ime nađe i kad OCR pokvari ostatak zaglavlja
+const STORES = [
+  [/UN[I1]VER ?EXP[O0]RT/, "Univerexport"], [/\bMAXI\b/, "Maxi"], [/\bIDEA\b/, "Idea"], [/\bRODA\b/, "Roda"], [/MERCATOR/, "Mercator"],
+  [/\bLIDL\b/, "Lidl"], [/\bAMAN\b/, "Aman"], [/\bDIS\b/, "DIS"], [/\bTEMPO\b/, "Tempo"], [/SHOP ?& ?GO|SHOPNGO/, "Shop&Go"],
+  [/GOMEX/, "Gomex"], [/\bLILLY\b/, "Lilly"], [/\bDM\b.*DROGERIE|DM DROGERIE/, "dm"], [/BENU/, "Benu"], [/JANKOVIC/, "Apoteka Janković"],
+  [/\bNIS\b|NIS PETROL/, "NIS Petrol"], [/\bMOL\b/, "MOL"], [/\bOMV\b/, "OMV"], [/LUKOIL/, "Lukoil"], [/GAZPROM/, "Gazprom"],
+  [/KNEZ PETROL/, "Knez Petrol"], [/\bEKO\b/, "EKO"], [/TOBACCO ?SHOP|TOBACCO PRESS/, "Tobacco Shop"], [/\bIDEA\b/, "Idea"],
+  [/DELHAIZE/, "Maxi"], [/AHOLD/, "Maxi"], [/METRO/, "Metro"], [/\bVERO\b/, "Vero"], [/PEKABETA/, "Pekabeta"],
+];
 
 // koliko je čitanje dobro: zbir artikala se slaže sa ukupnim iznosom, ima artikala, datuma, iznosa
 export function scoreParse(r) {
