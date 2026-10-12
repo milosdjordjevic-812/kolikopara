@@ -1021,7 +1021,7 @@ async function saveOcr() {
 
 function openManual(income = false, listen = false) {
   S.sheet = { kind: "manual", income, cat: "nerazvrstano", payment: income ? "racun" : "gotovina", desc: "", amount: "", date: today(), person: "", items: [], said: "", sayNote: "" };
-  drawSheet(); if (listen) toggleVoice();
+  sttAvailable(); drawSheet(); if (listen) toggleVoice();
 }
 const incomeNames = () => [...new Set(S.data.receipts.filter(r => r.cat === "priliv" && r.merchant).map(r => r.merchant))].sort();
 function drawManual() {
@@ -1031,7 +1031,7 @@ function drawManual() {
   <div class="sheet" role="dialog" aria-modal="true"><div class="sheet-in">
     <div class="catgrid"><button class="chip" data-mmode="out" aria-pressed="${!st.income}">Trošak</button><button class="chip" data-mmode="in" aria-pressed="${!!st.income}">Uplata</button></div>
     <div class="say${st.listening ? " on" : ""}">
-      <button class="saybtn" data-mvoice aria-label="${st.listening ? "Završi" : "Izgovori"}">${icon("mikrofon", 22)}<span>${st.listening ? "Slušam, dodirni kad završiš" : "Izgovori"}</span></button>
+      <button class="saybtn" data-mvoice aria-label="${st.listening ? "Završi" : "Izgovori"}">${icon("mikrofon", 22)}<span>${st.busy ? "Prepoznajem" : st.listening ? "Slušam, dodirni kad završiš" : "Izgovori"}</span></button>
       <input id="m-say" value="${esc(st.said || "")}" placeholder="${st.income ? "npr. Akka studio uplata 100000" : "npr. pijaca, paradajz 230, krastavac 120"}" enterkeyhint="done" autocomplete="off" aria-label="Unos rečenicom">
       ${st.sayNote ? `<p class="note">${esc(st.sayNote)}</p>` : ""}
     </div>
@@ -1093,37 +1093,85 @@ function applySaid(text) {
   st.sayNote = r.income ? "Proveri ime i iznos, pa sačuvaj." : r.items.length ? `Upisano ${stavki(r.items.length)}. Proveri pa sačuvaj.` : "Proveri pa sačuvaj.";
 }
 
-let rec = null;
-function toggleVoice() {
-  const st = S.sheet; if (!st) return;
-  if (rec) { try { rec.stop(); } catch (_) {} return; }
-  readManual();
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    st.sayNote = "Telefon ne daje appu mikrofon direktno. Dodirni polje iznad, pa mikrofon na tastaturi, izgovori i dodirni Gotovo.";
-    drawSheet(); document.getElementById("m-say")?.focus(); return;
-  }
-  const start = lang => {
-    const r = new SR(); rec = r;
-    r.lang = lang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-    let heard = "", err = "";
-    r.onresult = ev => { heard = [...ev.results].map(x => x[0].transcript).join(" ").trim(); const inp = document.getElementById("m-say"); if (inp) inp.value = heard; };
-    r.onerror = ev => {
-      if (ev.error === "language-not-supported" && lang !== "hr-HR") { rec = null; start("hr-HR"); return; }
-      err = ev.error === "not-allowed" || ev.error === "service-not-allowed" ? "Mikrofon nije dozvoljen. Dozvoli ga u podešavanjima ili dodirni polje iznad i koristi mikrofon na tastaturi."
-        : ev.error === "no-speech" ? "Nisam ništa čuo. Dodirni Izgovori i probaj ponovo." : "Mikrofon nije uspeo. Dodirni polje iznad i koristi mikrofon na tastaturi.";
-    };
-    r.onend = () => {
-      if (rec !== r) return;
-      rec = null; if (S.sheet !== st) return;
-      st.listening = false;
-      if (heard) applySaid(heard); else if (err) st.sayNote = err;
-      redrawKeep();
-    };
-    try { r.start(); st.listening = true; st.sayNote = ""; } catch (_) { rec = null; st.listening = false; st.sayNote = "Mikrofon nije uspeo. Dodirni polje iznad i koristi mikrofon na tastaturi."; }
-  };
-  start("sr-RS");
+/*
+ * Glas. Na iPhoneu, u appu dodatom na početni ekran, ugrađeno prepoznavanje (SpeechRecognition) često postoji
+ * ali ništa ne radi, pa je prvi izbor snimak koji prepoznaje server (/api/transcribe). Ako server nema ključ,
+ * probaj ugrađeno, sa čuvarem vremena; ako ni to ne krene, ostaje mikrofon na tastaturi.
+ */
+let rec = null, sttOk = null;
+const VOICE_FAIL = "Mikrofon u appu ne radi na ovom telefonu. Dodirni polje iznad, pa mikrofon na tastaturi, izgovori i dodirni Gotovo.";
+async function sttAvailable() {
+  if (sttOk !== null) return sttOk;
+  try { const r = await fetch("/api/transcribe", { cache: "no-store" }); sttOk = r.ok && !!(await r.json()).ok; } catch (_) { sttOk = false; }
+  return sttOk;
+}
+function voiceDone(st, text, err) {
+  rec = null;
+  if (S.sheet !== st) return;
+  st.listening = false; st.busy = false;
+  if (text) applySaid(text); else if (err) st.sayNote = err;
   redrawKeep();
+  if (!text && err === VOICE_FAIL) document.getElementById("m-say")?.focus();
+}
+async function toggleVoice() {
+  const st = S.sheet; if (!st || st.busy) return;
+  if (rec) { rec.finish(); return; }
+  readManual();
+  st.listening = true; st.sayNote = ""; redrawKeep();
+  if (window.MediaRecorder && navigator.mediaDevices?.getUserMedia && await sttAvailable()) return recordVoice(st);
+  speechVoice(st);
+}
+
+// snimak, pa tekst sa servera
+async function recordVoice(st) {
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (_) { voiceDone(st, "", "Mikrofon nije dozvoljen. Dozvoli ga u podešavanjima telefona za ovaj app, ili koristi mikrofon na tastaturi."); return; }
+  const type = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find(t => MediaRecorder.isTypeSupported?.(t)) || "";
+  const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined), chunks = [];
+  const stopAll = () => stream.getTracks().forEach(t => t.stop());
+  const limit = setTimeout(() => rec && rec.finish(), 30000);
+  rec = { finish: () => { clearTimeout(limit); if (mr.state !== "inactive") mr.stop(); } };
+  mr.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+  mr.onstop = async () => {
+    stopAll(); rec = null;
+    if (S.sheet !== st) return;
+    st.listening = false; st.busy = true; st.sayNote = "Prepoznajem..."; redrawKeep();
+    try {
+      const blob = new Blob(chunks, { type: mr.mimeType || type || "audio/mp4" });
+      const b64 = await new Promise((ok, bad) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(",")[1] || ""); fr.onerror = bad; fr.readAsDataURL(blob); });
+      const r = await fetch("/api/transcribe", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + (S.session?.access_token || "") }, body: JSON.stringify({ audio: b64, type: blob.type }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { voiceDone(st, "", j.error || "Prepoznavanje nije uspelo. Probaj ponovo."); return; }
+      if (j.text) { const inp = document.getElementById("m-say"); if (inp) inp.value = j.text; }
+      voiceDone(st, j.text, "Nisam ništa čuo. Dodirni Izgovori i probaj ponovo.");
+    } catch (_) { voiceDone(st, "", "Prepoznavanje nije uspelo. Proveri internet i probaj ponovo."); }
+  };
+  try { mr.start(); } catch (_) { stopAll(); voiceDone(st, "", VOICE_FAIL); }
+}
+
+// ugrađeno prepoznavanje u pregledaču
+function speechVoice(st) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { voiceDone(st, "", VOICE_FAIL); return; }
+  const go = lang => {
+    const r = new SR();
+    let heard = "", err = "", started = false, ended = false;
+    const end = () => { if (ended) return; ended = true; clearTimeout(wd); voiceDone(st, heard, err || (started ? "Nisam ništa čuo. Dodirni Izgovori i probaj ponovo." : VOICE_FAIL)); };
+    // ako se za 3 s ne javi da sluša, ugrađeno prepoznavanje ovde ne radi
+    const wd = setTimeout(() => { if (!started) { try { r.abort(); } catch (_) {} end(); } }, 3000);
+    rec = { finish: () => { try { r.stop(); } catch (_) {} setTimeout(end, 1500); } };
+    r.lang = lang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+    r.onstart = r.onaudiostart = () => { started = true; };
+    r.onresult = ev => { started = true; heard = [...ev.results].map(x => x[0].transcript).join(" ").trim(); const inp = document.getElementById("m-say"); if (inp) inp.value = heard; };
+    r.onerror = ev => {
+      if (ev.error === "language-not-supported" && lang !== "hr-HR") { ended = true; clearTimeout(wd); go("hr-HR"); return; }
+      err = ev.error === "not-allowed" || ev.error === "service-not-allowed" ? VOICE_FAIL : ev.error === "no-speech" ? "Nisam ništa čuo. Dodirni Izgovori i probaj ponovo." : VOICE_FAIL;
+    };
+    r.onend = end;
+    try { r.start(); } catch (_) { end(); }
+  };
+  go("sr-RS");
 }
 
 async function saveManual() {
