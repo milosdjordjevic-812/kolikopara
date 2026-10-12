@@ -118,7 +118,8 @@ export function derive(state) {
   }
 
   // 3. uparivanje računa i uplatnica koji nisu plaćeni gotovinom sa stavkom iz banke
-  const recs = [...receipts].sort((a, b) => (a.issued_at < b.issued_at ? -1 : 1));
+  // "stanje" je zapis koliko imaš na neki dan, nije stavka
+  const recs = receipts.filter(r => r.cat !== "stanje").sort((a, b) => (a.issued_at < b.issued_at ? -1 : 1));
   const taken = new Set();
   for (const rc of recs) {
     if (rc.payment === "gotovina") continue;
@@ -129,7 +130,8 @@ export function derive(state) {
       if (taken.has(b.id) || b.auto.cash) continue;
       if (Math.abs(b.raw - target) > 0.01 && Math.abs(b.amount - target) > 0.01) continue;
       const gap = dayNum(b.d) - rd;
-      if (gap < -1 || gap > 4) continue;
+      // uplata upisana ručno može da legne na račun i nekoliko dana kasnije
+      if (rc.refund ? gap < -5 || gap > 10 : gap < -1 || gap > 4) continue;
       if (Math.abs(gap) < bestGap) { best = b; bestGap = Math.abs(gap); }
     }
     if (best) { taken.add(best.id); best.receipt = rc; rc._matched = best.id; } else rc._matched = null;
@@ -221,7 +223,7 @@ export function totals(list) {
       if (p.cat === "gotovina") { W += -p.amount; continue; }
       add(c.id, p.amount);
       if (c.kind === "spend") { if (e.cash) C += -p.amount; else bankSpend += -p.amount; }
-      if (c.kind !== "pass" && p.amount > 0 && e.type === "bank") inc += p.amount;
+      if (p.amount > 0 && (e.type === "bank" ? c.kind !== "pass" : c.kind === "income")) inc += p.amount;
     }
   }
   const nWithdrawals = list.filter(e => e.parts.some(p => p.cat === "gotovina")).length;
@@ -229,6 +231,21 @@ export function totals(list) {
   if (unexplained > 0) { by.gotovina = { sum: -unexplained, n: nWithdrawals }; }
   const spend = r2(bankSpend + C + unexplained);
   return { by, spend, inc: r2(inc), withdrawn: r2(W), cashReceipts: r2(C), unexplained, feeConv: r2(feeConv) };
+}
+
+/*
+ * Koliko imaš: poslednje upisano stanje, plus uplate i minus potrošnja posle tog trenutka.
+ * Prolazni novac i prenosi između tvojih računa ne menjaju stanje. Podignuta gotovina se računa
+ * kao potrošena, isto kao u pregledu potrošnje.
+ */
+export function balance(receipts, list) {
+  const st = receipts.filter(r => r.cat === "stanje").sort((a, b) => String(a.issued_at).localeCompare(String(b.issued_at)) || String(a.created_at || "").localeCompare(String(b.created_at || ""))).pop();
+  if (!st) return null;
+  const d0 = String(st.issued_at).slice(0, 10), at = String(st.created_at || st.issued_at);
+  // posle dana stanja; istog dana samo ono što je upisano posle stanja
+  const after = list.filter(e => e.d > d0 || (e.d === d0 && e.type === "receipt" && String(e.receipt.created_at || "") > at));
+  const T = totals(after);
+  return { start: Number(st.total), d0, row: st, inc: T.inc, spend: T.spend, now: r2(Number(st.total) + T.inc - T.spend), n: after.length };
 }
 
 export function stableId(d, t, a, occ) {

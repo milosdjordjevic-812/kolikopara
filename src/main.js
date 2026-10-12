@@ -1,6 +1,6 @@
 import "./style.css";
 import { sb, configured, loadAll, saveOverride, deleteOverride, saveRule, deleteRule, insertReceipt, updateReceipt, deleteReceipt, replaceBankRange, importBackup, exportBackup } from "./db.js";
-import { CATS, CAT, catName, derive, totals, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
+import { CATS, CAT, catName, derive, totals, balance, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
 import { parseIps, isFiscalUrl } from "./shared/fiscal.js";
 import { startCamera, grabFrame } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
@@ -160,6 +160,7 @@ function renderOverview() {
         <div class="wallet card-tile" id="card"></div>
         <div class="actions"><button class="cta big" data-scan>[ Skeniraj prvi račun ]</button></div>
         <p class="sub"><span>Ili u delu Više ubaci</span> izvod iz e-bankinga <span>ili rezervnu kopiju.</span></p>
+        ${haveLine()}
       </div>
     </div>`;
     startWallet();
@@ -188,13 +189,14 @@ function renderOverview() {
     <div style="margin-top:26px"><span class="eyebrow">[${from ? esc(dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
     <div class="label">Potrošeno</div>
     <h1 class="num">${money(T.spend)}<span class="rsd">RSD</span></h1>
+    ${haveLine()}
     <div class="wallet" id="wallet"></div>
     <div class="actions"><button class="cta big" data-scan>[ Skeniraj račun ]</button></div>
     <p class="sub"><span>${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno</span> ${money(T.spend / span)} dinara dnevno. <span>Bez prolaznog novca i prenosa između tvojih računa.</span></p>
   </div>
   <div class="strip">
     <div><span class="meta dim">Gotovina bez računa</span><span class="v num">${money(T.unexplained)}</span></div>
-    <div><span class="meta dim">Ušlo na račun</span><span class="v num">${money(T.inc)}</span></div>
+    <div><span class="meta dim">Uplate</span><span class="v num">${money(T.inc)}</span></div>
     <div><span class="meta dim">Banci, provizije</span><span class="v num">${money(prov + T.feeConv)}</span></div>
     <div><span class="meta dim">Čeka kategoriju</span><span class="v num">${stavki(unc)}</span></div>
   </div>
@@ -242,7 +244,7 @@ function rowHtml(e) {
     const part = e.parts.length > 1 ? " " + money(p.amount) : "";
     return `<span class="tag ${cls}">${esc(catName(p.cat) + extra + part)}</span>`;
   }).join("");
-  const doc = e.receipt ? `<span class="tag doc">${e.receipt.kind === "ips" ? "Uplatnica" : e.receipt.kind === "manual" ? "Ručno" : "Račun"}${e.cash ? ", gotovina" : ""}</span>` : "";
+  const doc = e.receipt ? `<span class="tag doc">${e.receipt.kind === "ips" ? "Uplatnica" : e.receipt.cat === "priliv" ? "Uplata" : e.receipt.kind === "manual" ? "Ručno" : "Račun"}${e.cash ? ", gotovina" : ""}</span>` : "";
   const info = [e.label, e.fee ? "uključena konverzija " + money(-e.fee, true) : "", e.pending ? "čeka izvod" : "", e.rule && !e.manual ? "pravilo: " + e.rule.toLowerCase() : ""].filter(Boolean).join(", ");
   const main = e.parts[0]?.cat || "nerazvrstano";
   return `<button class="trow" data-edit="${esc(e.id)}">
@@ -383,6 +385,49 @@ async function doImport(rows) {
   } else renderMore();
 }
 
+/* ---------- koliko imaš ---------- */
+const bal = () => balance(S.data.receipts, list());
+function haveLine() {
+  const b = bal();
+  return b ? `<button class="have" data-have><span class="meta">Imaš</span><span class="num">${b.now < 0 ? "-" : ""}${money(b.now)}</span><span class="meta">RSD</span></button>`
+    : `<button class="have empty" data-have><span class="meta">Upiši koliko imaš i uplate</span></button>`;
+}
+function openHave() { S.sheet = { kind: "have", edit: !bal() }; drawSheet(); }
+function drawHave() {
+  const st = S.sheet, b = bal();
+  const incs = b ? list().filter(e => e.amount > 0 && e.parts.some(p => p.cat === "priliv") && (e.d > b.d0 || (e.d === b.d0 && e.type === "receipt" && String(e.receipt.created_at || "") > String(b.row.created_at || "")))) : [];
+  layer.innerHTML = `<div class="scrim" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="h-t"><div class="sheet-in">
+    <span class="meta dim">Na računu i u gotovini, bez tuđeg novca</span>
+    <h3 id="h-t">Koliko imaš</h3>
+    ${b ? `<div class="num" style="font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1">${b.now < 0 ? "-" : ""}${money(b.now)} <span class="meta dim">RSD</span></div>
+      <div class="hrows">
+        <div><span>Stanje ${esc(dShort(b.d0) + b.d0.slice(0, 4))}.</span><span class="num">${money(b.start)}</span></div>
+        <div><span>Uplate od tada</span><span class="num">${b.inc ? "+" : ""}${money(b.inc)}</span></div>
+        <div><span>Potrošeno od tada</span><span class="num">${b.spend ? "-" : ""}${money(b.spend)}</span></div>
+      </div>
+      ${incs.length ? `<div class="field"><span class="meta">Uplate</span><div class="items">${incs.slice(0, 8).map(e => `<button class="irow" data-edit-in="${esc(e.id)}"><span class="n">${esc(e.name)} <span class="dim">${esc(dShort(e.d))}</span></span><span class="a num">+${money(e.amount, true)}</span>${e.pending ? `<span class="meta dim">čeka izvod</span>` : ""}</button>`).join("")}</div></div>` : ""}`
+      : `<p class="note" style="margin:0">Upiši koliko novca imaš sada, na računu i u novčaniku zajedno. Od tog trenutka uplate se dodaju, a troškovi oduzimaju.</p>`}
+    ${st.edit ? `<div class="map">
+        <label class="field"><span class="meta">Imam sada</span><input id="h-amt" inputmode="decimal" placeholder="npr. 85000" value="${esc(st.amt || "")}"></label>
+        <label class="field"><span class="meta">Na dan</span><input id="h-date" type="date" value="${esc(st.date || today())}"></label>
+      </div>
+      <div class="row-btns"><button class="cta" data-hsave>[ Sačuvaj stanje ]</button>${b ? `<button class="btn" data-hcancel>Otkaži</button>` : ""}</div>`
+    : `<div class="row-btns"><button class="cta" data-income>[ + Uplata ]</button><button class="btn" data-hedit>Ispravi stanje</button><button class="btn" data-close>Zatvori</button></div>`}
+  </div></div>`;
+}
+async function saveHave() {
+  const st = S.sheet, a = document.getElementById("h-amt"), d = document.getElementById("h-date");
+  st.amt = a.value; st.date = d.value;
+  const v = parseAmt(a.value);
+  if (!isFinite(v)) { toast("Upiši iznos, na primer 85000"); return; }
+  const row = { kind: "manual", issued_at: (d.value || today()) + "T12:00:00", merchant: "Stanje", store: "", total: Math.round(v * 100) / 100, payment: "racun", refund: false, items: [], cat: "stanje", person: "" };
+  const saved = await guard(() => insertReceipt(row), "Stanje sačuvano");
+  if (!saved) return;
+  S.data.receipts.push(saved); cache = null;
+  S.sheet = { kind: "have", edit: false }; drawSheet(); render();
+}
+
 /* ---------- izmena stavke ---------- */
 function personsList() {
   const s = new Set();
@@ -418,6 +463,7 @@ function drawSheet() {
   if (st.kind === "manual") return drawManual();
   if (st.kind === "ocrwait") return drawOcrWait();
   if (st.kind === "ocr") return drawOcr();
+  if (st.kind === "have") return drawHave();
   const e = st.e, rc = e.receipt, isPass = st.cat === "prolazno", isRec = e.type === "receipt";
   layer.innerHTML = `<div class="scrim" data-close></div>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t"><div class="sheet-in">
@@ -744,12 +790,14 @@ async function saveOcr() {
   afterSaved(saved);
 }
 
-function openManual() { S.sheet = { kind: "manual", cat: "nerazvrstano", payment: "gotovina", desc: "", amount: "", date: today(), person: "" }; drawSheet(); }
+function openManual(income = false) { S.sheet = { kind: "manual", income, cat: "nerazvrstano", payment: income ? "racun" : "gotovina", desc: "", amount: "", date: today(), person: "" }; drawSheet(); }
+const incomeNames = () => [...new Set(S.data.receipts.filter(r => r.cat === "priliv" && r.merchant).map(r => r.merchant))].sort();
 function drawManual() {
   const st = S.sheet;
   layer.innerHTML = `<div class="scrim" data-close></div>
   <div class="sheet" role="dialog" aria-modal="true"><div class="sheet-in">
-    <span class="meta dim">Ručni unos</span><h3>Trošak bez računa</h3>
+    <div class="catgrid"><button class="chip" data-mmode="out" aria-pressed="${!st.income}">Trošak</button><button class="chip" data-mmode="in" aria-pressed="${!!st.income}">Uplata</button></div>
+    ${st.income ? drawIncomeFields(st) : `<h3>Trošak bez računa</h3>
     <div class="map">
       <label class="field"><span class="meta">Na šta</span><input id="m-desc" value="${esc(st.desc)}" placeholder="npr. pijaca, frizer"></label>
       <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="0"></label>
@@ -758,9 +806,19 @@ function drawManual() {
     <div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["gotovina", "kartica", "racun"].map(p => `<button class="chip" data-mpay="${p}" aria-pressed="${st.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>
     <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina" || c.id === "prolazno").map(c => `<button class="chip" data-mcat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
     ${st.cat === "prolazno" ? `<label class="field"><span class="meta">Za koga</span><input id="m-person" list="m-people" value="${esc(st.person)}" autocomplete="off"><datalist id="m-people">${personsList().map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>` : ""}
-    <p class="note" style="margin:0">Gotovina se odbija od podignutog novca. Kartica i sa računa se uparuju sa izvodom, pa se ne računaju dva puta.</p>
+    <p class="note" style="margin:0">Gotovina se odbija od podignutog novca. Kartica i sa računa se uparuju sa izvodom, pa se ne računaju dva puta.</p>`}
     <div class="row-btns"><button class="cta" data-msave>[ Sačuvaj ]</button><button class="btn" data-close>Otkaži</button></div>
   </div></div>`;
+}
+function drawIncomeFields(st) {
+  return `<h3>Uplata</h3>
+    <div class="map">
+      <label class="field"><span class="meta">Od koga</span><input id="m-desc" list="m-from" value="${esc(st.desc)}" placeholder="npr. Hristijan" autocomplete="off"><datalist id="m-from">${incomeNames().map(n => `<option value="${esc(n)}">`).join("")}</datalist></label>
+      <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="0"></label>
+      <label class="field"><span class="meta">Datum</span><input id="m-date" type="date" value="${esc(st.date)}"></label>
+    </div>
+    <div class="field"><span class="meta">Gde je ušlo</span><div class="catgrid">${[["racun", "Na račun"], ["gotovina", "U gotovini"]].map(([p, n]) => `<button class="chip" data-mpay="${p}" aria-pressed="${st.payment === p}">${n}</button>`).join("")}</div></div>
+    <p class="note" style="margin:0">Dodaje se na Koliko imaš. Uplata na račun se upari sa izvodom kad ga ubaciš, pa se ne računa dva puta.</p>`;
 }
 function readManual() {
   const st = S.sheet;
@@ -771,10 +829,12 @@ async function saveManual() {
   readManual();
   const st = S.sheet, amt = Math.abs(parseAmt(st.amount));
   if (!isFinite(amt) || amt <= 0) { toast("Upiši iznos"); return; }
-  if (!st.desc.trim()) { toast("Upiši na šta je potrošeno"); return; }
+  if (!st.desc.trim()) { toast(st.income ? "Upiši od koga je uplata" : "Upiši na šta je potrošeno"); return; }
   if (st.cat === "prolazno" && !st.person) { toast("Upiši za koga je ovaj novac"); return; }
-  const row = { kind: "manual", issued_at: (st.date || today()) + "T12:00:00", merchant: st.desc.trim(), store: "", total: amt, payment: st.payment, refund: false, items: [], cat: st.cat, person: st.cat === "prolazno" ? st.person : "" };
-  const saved = await guard(() => insertReceipt(row), "Sačuvano");
+  const row = st.income
+    ? { kind: "manual", issued_at: (st.date || today()) + "T12:00:00", merchant: st.desc.trim(), store: "", total: amt, payment: st.payment, refund: true, items: [], cat: "priliv", person: "" }
+    : { kind: "manual", issued_at: (st.date || today()) + "T12:00:00", merchant: st.desc.trim(), store: "", total: amt, payment: st.payment, refund: false, items: [], cat: st.cat, person: st.cat === "prolazno" ? st.person : "" };
+  const saved = await guard(() => insertReceipt(row), st.income ? "Uplata sačuvana" : "Sačuvano");
   if (!saved) return;
   S.data.receipts.push(saved); S.sheet = null; drawSheet(); changed();
 }
@@ -788,6 +848,7 @@ app.addEventListener("click", async ev => {
   const e = t.closest("[data-edit]"); if (e) { openEdit(e.dataset.edit); return; }
   const g = t.closest("[data-go]"); if (g) { S.view = g.dataset.go; render(); window.scrollTo(0, 0); return; }
   if (t.closest("[data-scan]")) { openScan(); return; }
+  if (t.closest("[data-have]")) { openHave(); return; }
   const th = t.closest("[data-theme-set]"); if (th) { setTheme(th.dataset.themeSet); render(); return; }
   if (t.closest("[data-dismiss-install]")) { try { localStorage.setItem("kp-install", "1"); } catch (_) {} render(); return; }
   const dr = t.closest("[data-delrule]");
@@ -834,6 +895,12 @@ layer.addEventListener("click", ev => {
     if (t.closest("[data-osave]")) { saveOcr(); return; }
   }
   if (t.closest("[data-omanual]")) { openManual(); return; }
+  if (t.closest("[data-hsave]")) { saveHave(); return; }
+  if (t.closest("[data-hedit]")) { st.edit = true; st.amt = bal() ? String(bal().now) : ""; st.date = today(); drawSheet(); return; }
+  if (t.closest("[data-hcancel]")) { st.edit = false; drawSheet(); return; }
+  if (t.closest("[data-income]")) { openManual(true); return; }
+  const ei = t.closest("[data-edit-in]"); if (ei) { openEdit(ei.dataset.editIn); return; }
+  const mm = t.closest("[data-mmode]"); if (mm) { readManual(); st.income = mm.dataset.mmode === "in"; st.payment = st.income ? "racun" : "gotovina"; drawSheet(); return; }
 });
 layer.addEventListener("change", ev => {
   if (ev.target.id === "o-retake" && ev.target.files[0]) { startOcr(ev.target.files[0]); return; }
