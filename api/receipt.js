@@ -1,6 +1,6 @@
 // Vercel funkcija: prima link iz QR koda fiskalnog računa, otvara stranu
 // Poreske uprave i vraća pročitan račun (prodavac, datum, iznos, plaćanje, artikli).
-import { extractJournal, parseJournal, isFiscalUrl, latin } from "../src/shared/fiscal.js";
+import { extractJournal, parseJournal, fiscalUrl, latin } from "../src/shared/fiscal.js";
 
 const UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 
@@ -28,8 +28,8 @@ async function trySpecifications(html, cookie) {
 export default async function handler(req, res) {
   res.setHeader("cache-control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ error: "Samo POST." });
-  const url = String((req.body && req.body.url) || "").trim();
-  if (!isFiscalUrl(url)) return res.status(400).json({ error: "Ovo nije link fiskalnog računa." });
+  const url = fiscalUrl(req.body && req.body.url);
+  if (!url) return res.status(400).json({ error: "Ovo nije link fiskalnog računa." });
 
   let html, cookie = "";
   try {

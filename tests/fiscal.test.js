@@ -101,3 +101,37 @@ test("IPS uplatnica", () => {
 });
 
 test("latinica", () => assert.equal(latin("Ђорђевић"), "Đorđević"));
+
+// Pravi račun sa SUF strane nema oznake "Preduzeće:" i "Mesto prodaje:", nego samo redove posle naslova.
+test("zaglavlje bez oznaka: PIB, preduzeće, prodajno mesto sa šifrom", () => {
+  const r = parseJournal(`============ ФИСКАЛНИ РАЧУН ============
+               100000000
+      PRIMER TRGOVINA DOO BEOGRAD
+ 1002041-152 - Prodavnica Centar
+             УЛИЦА 1
+            Београд
+Касир:                            Ana
+-------------ПРОМЕТ ПРОДАЈА-------------
+Артикли
+========================================
+Назив   Цена         Кол.         Укупно
+Banana/KG (Е)
+       199,99      1,140          227,99
+----------------------------------------
+Укупан износ:                     227,99
+Платна картица:                   227,99
+========================================
+ПФР време:          12.10.2026. 14:46:53`);
+  assert.equal(r.merchant, "PRIMER TRGOVINA DOO BEOGRAD");
+  assert.equal(r.store, "Prodavnica Centar");
+  assert.equal(r.items[0].qty, 1.14);
+  assert.equal(r.total, 227.99);
+});
+
+test("link fiskalnog računa se prepoznaje i kad nije potpun", async () => {
+  const { fiscalUrl } = await import("../src/shared/fiscal.js");
+  const vl = "AzRHU1AyN1hWNEdTUDI3WFbDEQQAcRAEAFBKTwIAAAAAAAABoTAm1ScAAABE4REk2vXndlKk%2Ft0";
+  assert.equal(fiscalUrl("https://suf.purs.gov.rs/v/?vl=" + vl), "https://suf.purs.gov.rs/v/?vl=" + vl);
+  assert.equal(fiscalUrl("﻿suf.purs.gov.rs/v/?vl=" + vl + " "), "https://suf.purs.gov.rs/v/?vl=" + vl);
+  assert.equal(fiscalUrl("https://example.com/?vl=" + vl), null);
+});

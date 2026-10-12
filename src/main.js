@@ -1,7 +1,7 @@
 import "./style.css";
 import { sb, configured, loadAll, saveOverride, deleteOverride, saveRule, deleteRule, insertReceipt, updateReceipt, deleteReceipt, replaceBankRange, importBackup, exportBackup } from "./db.js";
 import { CATS, CAT, catName, derive, totals, balance, META_CATS, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
-import { parseIps, isFiscalUrl } from "./shared/fiscal.js";
+import { parseIps, isFiscalUrl, fiscalUrl } from "./shared/fiscal.js";
 import { startCamera, grabFrame } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
@@ -770,7 +770,7 @@ function openScan() {
   document.body.appendChild(cam);
   const hint = cam.querySelector("#cam-hint");
   // QR se traži u oba načina: ako se ipak pročita, račun ide preko QR koda
-  stopCam = startCamera(cam.querySelector("video"), text => handleQr(text), () => { cam.dataset.nocam = "1"; if (cam.dataset.mode === "qr") hint.textContent = "Kamera nije dostupna. Dozvoli kameru u podešavanjima ili izaberi Slikaj tekst računa."; });
+  startQr(cam.querySelector("video"), () => { cam.dataset.nocam = "1"; if (cam.dataset.mode === "qr") hint.textContent = "Kamera nije dostupna. Dozvoli kameru u podešavanjima ili izaberi Slikaj tekst računa."; });
   cam.querySelector("#cam-text").onchange = ev => { const f = ev.target.files[0]; if (f) startOcr(f); };
   cam.addEventListener("click", ev => {
     if (ev.target.closest("[data-camclose]")) closeCam();
@@ -791,12 +791,22 @@ function openScan() {
     }
   });
 }
+// QR se prihvata samo ako je fiskalni račun ili uplatnica; sve drugo kamera preskače i čita dalje
+function startQr(video, onErr = () => {}) {
+  let rejects = 0;
+  stopCam = startCamera(video, handleQr, onErr, t => isFiscalUrl(t) || !!parseIps(t), t => {
+    const hint = document.getElementById("cam-hint");
+    if (++rejects >= 6 && hint && document.getElementById("cam")?.dataset.mode === "qr")
+      hint.textContent = `Pročitan je QR koji nije račun ni uplatnica (${t.slice(0, 28)}...). Drži telefon mirno i malo bliže kodu.`;
+  });
+}
 function closeCam() { if (stopCam) { stopCam(); stopCam = null; } const c = document.getElementById("cam"); if (c) c.remove(); }
 
 async function handleQr(text) {
   const hint = document.getElementById("cam-hint");
   if (isFiscalUrl(text)) {
-    if (S.data.receipts.some(r => r.source_url === text.trim())) { closeCam(); toast("Ovaj račun je već sačuvan."); return; }
+    text = fiscalUrl(text);
+    if (S.data.receipts.some(r => r.source_url === text)) { closeCam(); toast("Ovaj račun je već sačuvan."); return; }
     if (hint) hint.textContent = "Čitam račun kod Poreske uprave";
     try {
       const r = await fetch("/api/receipt", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: text.trim() }) });
@@ -809,7 +819,7 @@ async function handleQr(text) {
       drawSheet();
     } catch (e) {
       if (hint) hint.textContent = e.message + " Skeniraj ponovo, a ako je QR loše odštampan, izaberi Slikaj tekst računa.";
-      setTimeout(() => { if (document.getElementById("cam")) { const v = document.querySelector("#cam video"); stopCam = startCamera(v, handleQr, () => {}); } }, 1500);
+      setTimeout(() => { if (document.getElementById("cam")) startQr(document.querySelector("#cam video")); }, 1500);
     }
     return;
   }
@@ -822,7 +832,7 @@ async function handleQr(text) {
     return;
   }
   if (hint) hint.textContent = "Ovaj QR kod nije ni fiskalni račun ni uplatnica.";
-  setTimeout(() => { if (document.getElementById("cam")) { const v = document.querySelector("#cam video"); stopCam = startCamera(v, handleQr, () => {}); } }, 1800);
+  setTimeout(() => { if (document.getElementById("cam")) startQr(document.querySelector("#cam video")); }, 1800);
 }
 
 function drawResult() {

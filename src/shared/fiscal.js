@@ -59,6 +59,16 @@ export function parseJournal(journal) {
   const out = { merchant: "", store: "", issuedAt: null, total: NaN, payment: null, payments: {}, refund: false, sale: true, items: [] };
   out.merchant = val(/^\s*PREDUZE[ĆC]E\s*:/);
   out.store = val(/^\s*MESTO PRODAJE\s*:/);
+  // pravi računi često nemaju oznake: posle naslova idu PIB, preduzeće, prodajno mesto, adresa, grad
+  if (!out.merchant && !out.store) {
+    const h = L.findIndex(l => /FISKALNI RA[ČC]UN/.test(l));
+    const end = L.findIndex((l, i) => i > h && (/:/.test(l) || /^-{4,}/.test(l.trim())));
+    const head = lines.slice(h + 1, end > h ? end : h + 6).map(l => latin(l).trim()).filter(Boolean).filter(l => !/^\d{8,9}$/.test(l));
+    if (h >= 0 && head.length) {
+      out.merchant = head[0] || "";
+      out.store = (head[1] || "").replace(/^[\d-]+\s*-\s*/, "").trim();
+    }
+  }
 
   const t = L.find(l => /PFR VREME\s*:/.test(l)) || L.find(l => /\d{2}\.\d{2}\.\d{4}\.?\s+\d{1,2}:\d{2}/.test(l));
   if (t) {
@@ -118,4 +128,11 @@ export function parseIps(text) {
   };
 }
 
-export const isFiscalUrl = s => /^https:\/\/suf\.purs\.gov\.rs\/v\/?\?/i.test(String(s || "").trim());
+// Link fiskalnog računa iz QR koda, u jednom obliku. Prihvata i link bez https, sa velikim slovima
+// u adresi i sa nevidljivim znakovima oko teksta. Parametar vl (potpisan sadržaj računa) ostaje netaknut.
+export function fiscalUrl(s) {
+  const t = String(s || "").replace(/[\u0000-\u001f\u007f\u200b\ufeff]/g, "").trim();
+  const m = t.match(/suf\.purs\.gov\.rs\/v\/?\?(?:[^#\s]*?&)?vl=([A-Za-z0-9%+/=_\-]{40,})/i);
+  return m ? "https://suf.purs.gov.rs/v/?vl=" + m[1] : null;
+}
+export const isFiscalUrl = s => !!fiscalUrl(s);

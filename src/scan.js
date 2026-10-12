@@ -3,7 +3,9 @@ import jsQR from "jsqr";
 
 export function decodeImageData(img) {
   const r = jsQR(img.data, img.width, img.height, { inversionAttempts: "attemptBoth" });
-  return r ? r.data : null;
+  if (!r) return null;
+  if (r.data) return r.data;
+  try { return new TextDecoder("utf-8").decode(new Uint8Array(r.binaryData)); } catch (_) { return null; }
 }
 
 export async function decodeFile(file) {
@@ -24,24 +26,27 @@ export async function decodeFile(file) {
   } finally { URL.revokeObjectURL(url); }
 }
 
-export function startCamera(video, onResult, onError) {
-  let stream = null, raf = 0, stopped = false, last = 0;
+// accept: da li je pročitan tekst ono što tražimo; ako nije, kamera nastavlja da čita (onReject javlja šta je pročitano)
+export function startCamera(video, onResult, onError, accept = () => true, onReject = () => {}) {
+  let stream = null, raf = 0, stopped = false, last = 0, n = 0;
   const canvas = document.createElement("canvas");
   const g = canvas.getContext("2d", { willReadFrequently: true });
 
   const tick = t => {
     if (stopped) return;
     raf = requestAnimationFrame(tick);
-    if (t - last < 180 || video.readyState < 2) return;
+    if (t - last < 160 || video.readyState < 2) return;
     last = t;
     const w = video.videoWidth, h = video.videoHeight;
     if (!w || !h) return;
-    // čita centralni kvadrat, brže je i ignoriše ostatak kadra
-    const side = Math.min(w, h), sx = (w - side) / 2, sy = (h - side) / 2, out = Math.min(720, side);
+    // naizmenično: centralni kvadrat u manjoj rezoluciji (brzo) i veći isečak u većoj (gust QR sa fiskalnog računa)
+    const big = n++ % 2 === 1;
+    const side = Math.min(w, h) * (big ? 0.95 : 0.8), sx = (w - side) / 2, sy = (h - side) / 2, out = Math.round(Math.min(big ? 1200 : 720, side));
     canvas.width = out; canvas.height = out;
     g.drawImage(video, sx, sy, side, side, 0, 0, out, out);
     const text = decodeImageData(g.getImageData(0, 0, out, out));
-    if (text) { stop(); onResult(text); }
+    if (!text) return;
+    if (accept(text)) { stop(); onResult(text); } else onReject(text);
   };
 
   function stop() {
