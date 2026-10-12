@@ -234,7 +234,8 @@ section { margin-top: 52px }
 .intro-on #app .logo { visibility: hidden }
 
 /* koliko imaš */
-.have { display: inline-flex; align-items: baseline; gap: 8px; margin: 12px auto 0; border: 0; background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); padding: 6px 12px }
+.haverow { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 12px auto 0 }
+.have { display: inline-flex; align-items: baseline; gap: 8px; margin: 0; border: 0; background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); padding: 6px 12px }
 .have .num { font-size: 20px; font-weight: 500; letter-spacing: -.01em }
 .band .have { color: var(--band-ink); box-shadow: inset 0 0 0 1px rgba(236,231,216,.35) }
 .band .have .meta { color: var(--band-mute) }
@@ -242,3 +243,8 @@ section { margin-top: 52px }
 .band .have.empty .meta { color: var(--band-ink) }
 .hrows { display: grid; border-top: 1px solid var(--line) }
 .hrows div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px }
+.have.add .meta { color: inherit }
+.band .have.add .meta { color: var(--band-ink) }
+/* datum i vreme na iPhone-u: bez sistemskog izgleda koji izlazi van polja */
+.field input[type="date"], .field input[type="time"] { -webkit-appearance: none; appearance: none; display: block; box-sizing: border-box; max-width: 100%; min-height: 37px; text-align: left; color: var(--ink) }
+.field input[type="date"]::-webkit-date-and-time-value, .field input[type="time"]::-webkit-date-and-time-value { text-align: left; margin: 0 }

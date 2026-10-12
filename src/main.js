@@ -389,8 +389,9 @@ async function doImport(rows) {
 const bal = () => balance(S.data.receipts, list());
 function haveLine() {
   const b = bal();
-  return b ? `<button class="have" data-have><span class="meta">Imaš</span><span class="num">${b.now < 0 ? "-" : ""}${money(b.now)}</span><span class="meta">RSD</span></button>`
-    : `<button class="have empty" data-have><span class="meta">Upiši koliko imaš i uplate</span></button>`;
+  const have = b ? `<button class="have" data-have><span class="meta">Imaš</span><span class="num">${b.now < 0 ? "-" : ""}${money(b.now)}</span><span class="meta">RSD</span></button>`
+    : `<button class="have empty" data-have><span class="meta">Koliko imaš?</span></button>`;
+  return `<div class="haverow">${have}<button class="have add" data-income><span class="meta">+ Uplata</span></button></div>`;
 }
 function openHave() { S.sheet = { kind: "have", edit: !bal() }; drawSheet(); }
 function drawHave() {
@@ -412,7 +413,7 @@ function drawHave() {
         <label class="field"><span class="meta">Imam sada</span><input id="h-amt" inputmode="decimal" placeholder="npr. 85000" value="${esc(st.amt || "")}"></label>
         <label class="field"><span class="meta">Na dan</span><input id="h-date" type="date" value="${esc(st.date || today())}"></label>
       </div>
-      <div class="row-btns"><button class="cta" data-hsave>[ Sačuvaj stanje ]</button>${b ? `<button class="btn" data-hcancel>Otkaži</button>` : ""}</div>`
+      <div class="row-btns"><button class="cta" data-hsave>[ Sačuvaj stanje ]</button>${b ? `<button class="btn" data-hcancel>Otkaži</button>` : `<button class="btn" data-income>+ Uplata</button>`}</div>`
     : `<div class="row-btns"><button class="cta" data-income>[ + Uplata ]</button><button class="btn" data-hedit>Ispravi stanje</button><button class="btn" data-close>Zatvori</button></div>`}
   </div></div>`;
 }
@@ -849,6 +850,7 @@ app.addEventListener("click", async ev => {
   const g = t.closest("[data-go]"); if (g) { S.view = g.dataset.go; render(); window.scrollTo(0, 0); return; }
   if (t.closest("[data-scan]")) { openScan(); return; }
   if (t.closest("[data-have]")) { openHave(); return; }
+  if (t.closest("[data-income]")) { openManual(true); return; }
   const th = t.closest("[data-theme-set]"); if (th) { setTheme(th.dataset.themeSet); render(); return; }
   if (t.closest("[data-dismiss-install]")) { try { localStorage.setItem("kp-install", "1"); } catch (_) {} render(); return; }
   const dr = t.closest("[data-delrule]");
