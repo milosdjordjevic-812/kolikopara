@@ -1,7 +1,7 @@
 import "./style.css";
 import { sb, configured, loadAll, saveOverride, deleteOverride, saveRule, deleteRule, insertReceipt, updateReceipt, deleteReceipt, replaceBankRange, importBackup, exportBackup } from "./db.js";
 import { CATS, CAT, catName, derive, totals, balance, META_CATS, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
-import { parseIps, isFiscalUrl, fiscalUrl } from "./shared/fiscal.js";
+import { parseIps, isFiscalUrl, fiscalUrl, latin } from "./shared/fiscal.js";
 import { startCamera, grabFrame } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
@@ -1143,6 +1143,7 @@ async function recordVoice(st) {
       const r = await fetch("/api/transcribe", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + (S.session?.access_token || "") }, body: JSON.stringify({ audio: b64, type: blob.type }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { voiceDone(st, "", j.error || "Prepoznavanje nije uspelo. Probaj ponovo."); return; }
+      if (j.text) j.text = latin(j.text); // Whisper ponekad piše ćirilicom
       if (j.text) { const inp = document.getElementById("m-say"); if (inp) inp.value = j.text; }
       voiceDone(st, j.text, "Nisam ništa čuo. Dodirni Izgovori i probaj ponovo.");
     } catch (_) { voiceDone(st, "", "Prepoznavanje nije uspelo. Proveri internet i probaj ponovo."); }

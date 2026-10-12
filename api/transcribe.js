@@ -1,22 +1,26 @@
-// Vercel funkcija: prima kratak snimak glasa iz appa i vraća tekst (OpenAI prepoznavanje govora).
+// Vercel funkcija: prima kratak snimak glasa iz appa i vraća tekst (Whisper).
+// Besplatno preko Groq-a (GROQ_API_KEY), ili preko OpenAI-ja (OPENAI_API_KEY) ako je on podešen.
 // Radi samo za prijavljenog korisnika, da niko drugi ne bi trošio ključ.
-// GET kaže da li je prepoznavanje uključeno (da li postoji OPENAI_API_KEY).
+// GET kaže da li je prepoznavanje uključeno.
 export const config = { api: { bodyParser: { sizeLimit: "4mb" } } };
 
 const HINT = "Pijaca, paradajz 230 dinara, krastavac 120, jaja 300. Akka Studio uplata 100.000 dinara. Uradi sam 2.400. Frizer 1.500 gotovinom.";
 
-async function stt(key, model, buf, type, ext) {
+const GROQ = "https://api.groq.com/openai/v1/audio/transcriptions", OPENAI = "https://api.openai.com/v1/audio/transcriptions";
+
+async function stt(url, key, model, buf, type, ext) {
   const fd = new FormData();
   fd.append("file", new Blob([buf], { type }), "glas." + ext);
   fd.append("model", model);
   fd.append("language", "sr");
   fd.append("prompt", HINT);
-  return fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { authorization: "Bearer " + key }, body: fd });
+  return fetch(url, { method: "POST", headers: { authorization: "Bearer " + key }, body: fd });
 }
 
 export default async function handler(req, res) {
   res.setHeader("cache-control", "no-store");
-  const key = process.env.OPENAI_API_KEY;
+  const groq = process.env.GROQ_API_KEY, key = groq || process.env.OPENAI_API_KEY;
+  const url = groq ? GROQ : OPENAI, who = groq ? "Groq" : "OpenAI";
   if (req.method === "GET") return res.status(200).json({ ok: !!key });
   if (req.method !== "POST") return res.status(405).json({ error: "Samo POST." });
   if (!key) return res.status(501).json({ error: "Prepoznavanje govora nije uključeno." });
@@ -37,11 +41,11 @@ export default async function handler(req, res) {
   const mime = ext === "m4a" ? "audio/mp4" : type.split(";")[0];
 
   try {
-    let r = await stt(key, process.env.OPENAI_STT_MODEL || "gpt-4o-mini-transcribe", buf, mime, ext);
-    if (!r.ok && r.status !== 401 && r.status !== 429) r = await stt(key, "whisper-1", buf, mime, ext);
+    let r = await stt(url, key, groq ? "whisper-large-v3" : (process.env.OPENAI_STT_MODEL || "gpt-4o-mini-transcribe"), buf, mime, ext);
+    if (!r.ok && r.status !== 401 && r.status !== 429) r = await stt(url, key, groq ? "whisper-large-v3-turbo" : "whisper-1", buf, mime, ext);
     if (!r.ok) {
       const t = await r.text();
-      const why = r.status === 401 ? "OpenAI ključ nije ispravan." : r.status === 429 ? "OpenAI nalog nema kredita ili je dostignut limit." : `OpenAI greška ${r.status}.`;
+      const why = r.status === 401 ? `${who} ključ nije ispravan.` : r.status === 429 ? `${who}: dostignut dnevni limit, probaj kasnije.` : `${who} greška ${r.status}.`;
       return res.status(502).json({ error: why, detail: t.slice(0, 300) });
     }
     const j = await r.json();
