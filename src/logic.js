@@ -258,7 +258,8 @@ export function balance(receipts, list) {
   if (!st) return null;
   const d0 = String(st.issued_at).slice(0, 10), at = String(st.created_at || st.issued_at);
   // posle dana stanja; istog dana samo ono što je upisano posle stanja
-  const after = list.filter(e => e.d > d0 || (e.d === d0 && e.type === "receipt" && String(e.receipt.created_at || "") > at));
+  // (i račun koji je kasnije uparen sa izvodom istog dana: vreme upisa se gleda na računu)
+  const after = list.filter(e => e.d > d0 || (e.d === d0 && e.receipt && String(e.receipt.created_at || "") > at));
   const T = totals(after);
   return { start: Number(st.total), d0, row: st, inc: T.inc, spend: T.spend, now: r2(Number(st.total) + T.inc - T.spend), n: after.length };
 }

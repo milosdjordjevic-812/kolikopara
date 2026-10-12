@@ -70,3 +70,13 @@ test("prolazni novac: primljen i poslat dalje ne menja Koliko imaš", async () =
   const pogresno = { tx: [], receipts: [stanje, akka, { ...ulaz, cat: "priliv" }, { ...izlaz, cat: "interno" }] };
   assert.equal(balance(pogresno.receipts, derive(pogresno)).now, 149297 + 12900);
 });
+
+test("račun upisan posle stanja ostaje oduzet i kad stigne izvod istog dana", async () => {
+  const { derive, balance } = await import("../src/logic.js");
+  const stanje = { id: "s", kind: "manual", cat: "stanje", total: 10000, issued_at: "2026-10-12T12:00:00", created_at: "2026-10-12T09:00:00Z", payment: "racun", items: [] };
+  const maxi = { id: "m", kind: "fiscal", store: "MAXI", merchant: "DELHAIZE", total: 3875.08, issued_at: "2026-10-12T14:00:00", created_at: "2026-10-12T14:01:00Z", payment: "kartica", items: [] };
+  let st = { tx: [], receipts: [stanje, maxi] };
+  assert.equal(balance(st.receipts, derive(st)).now, 6124.92);
+  st = { tx: [{ id: "b", d: "2026-10-12", t: "MAXI 451 BEOGRAD", a: -3875.08 }], receipts: [stanje, maxi] };
+  assert.equal(balance(st.receipts, derive(st)).now, 6124.92);
+});
