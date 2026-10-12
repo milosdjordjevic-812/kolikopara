@@ -313,3 +313,11 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 
 .crop { width: min(78vw, 320px); aspect-ratio: 1; border-radius: 50%; overflow: hidden; position: relative; background: var(--tile); touch-action: none; justify-self: center }
 .crop img { position: absolute; left: 0; top: 0; user-select: none; -webkit-user-drag: none; max-width: none }
+
+/* korpa */
+.kitems { border-bottom: 1px solid var(--line); padding: 4px 0 10px 34px }
+.krow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-top: 1px dashed var(--line) }
+.krow:first-child { border-top: 0 }
+.krow .n { font-size: 15px; line-height: 20px; overflow-wrap: anywhere }
+.krow .v { font-size: 15px }
+.krow .meta { grid-column: 1 / -1; font-size: 11px; letter-spacing: .1em }

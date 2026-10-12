@@ -15,6 +15,8 @@ export const CATS = [
   { id: "racuni",       name: "Telefon i računi",    kind: "spend" },
   { id: "apoteka",      name: "Apoteka i drogerija", kind: "spend" },
   { id: "kupovina",     name: "Kupovina i stvari",   kind: "spend" },
+  { id: "kucaauto",     name: "Kuća, auto, uradi sam", kind: "spend" },
+  { id: "hemija",       name: "Kućna hemija i higijena", kind: "spend" },
   { id: "gotovina",     name: "Gotovina, bez računa",kind: "spend" },
   { id: "provizije",    name: "Banka i provizije",   kind: "spend" },
   { id: "ostalo",       name: "Ostalo",              kind: "spend" },
@@ -37,7 +39,8 @@ const MERCHANT = [
   ["racuni",    /YETTEL|A1 SRBIJA|TELEKOM|\bMTS\b|\bSBB\b|\bEPS\b|ELEKTROPRIVREDA|INFOSTAN|BEOGRADSKE ELEKTRANE|VODOVOD/],
   ["market",    /UNIVEREXPORT|MAXI|C MARKET|LIDL|SVEZE VOCE|SVEŽE VOĆE|THE PIJAC|AMAN DOO|\bIDEA\b|TEMPO|RODA|PERSPEKTIVA|DELHAIZE|MERCATOR/],
   ["izlasci",   /ZABAC|ŽABAC|BAR ZA|PIZZ|KAFE|CAFFE|KESTEN|ARGUMENT|HVALA TIP|RESTORAN/],
-  ["pumpa",     /MOL SERBIA|\bMOL\b|\bOMV\b|LUKOIL|EKO SERBIA|GASPETROL|\bNIS\b|PETROL/],
+  ["kucaauto",  /BAUHAUS|MERKUR|MR ?BRICOLAGE|PEVEX|URADI SAM|\bOBI\b|JYSK|AUTO ?DELOVI|AUTODELOVI|AUTO ?CENTAR|VULKANIZ|AUTO ?SERVIS|TEHNI[CČ]KI PREGLED|AUTO ?PERIONICA|PERIONICA|GVO[ŽZ][ĐD]AR|BOJE I LAKOVI|ELEKTRO ?MATERIJAL/],
+  ["pumpa",     /MOL SERBIA|\bMOL\b|\bOMV\b|LUKOIL|EKO SERBIA|GASPETROL|\bNIS (A\.?D|PETROL|GAZPROM)|GAZPROM|PETROL/],
   ["putarina",  /JP PUTEVI|PUTEVI SRBIJE/],
   ["apoteka",   /APOTEK|BENU|DM DROGERIE|\bDM\b|AGAPE ZU|LILLY/],
   ["kupovina",  /GIGATRON|ROBNA KUCA|ROBNA KUĆA|PANDA 888|TEHNOMANIJA|IKEA/],
@@ -46,6 +49,7 @@ const MERCHANT = [
 const ITEM = [
   ["cigarete", /MARLBORO|ROTHMANS|WINSTON|\bLD\b|CAMEL|PALL MALL|DAVIDOFF|CHESTERFIELD|PARLIAMENT|\bVOGUE\b|\bKENT\b|DUNHILL|LUCKY STRIKE|\bWEST\b|MORAVA|\bDRINA\b|CIGARE|IQOS|HEETS|TEREA|\bGLO\b|NEO STIK|DUVAN|TOBACCO|ELF ?BAR|VAPE|E-CIG|FILTER CIG|RIZLE/],
   ["gorivo",   /\bBMB\b|EVRO ?DIZEL|EURO ?DIESEL|\bDIZEL\b|DIESEL|G-DRIVE|BENZIN|\bTNG\b|AUTOGAS|AUTO GAS|\bLPG\b|MAXX ?MOTION|ADBLUE|EN ?590|\bEVRO ?PREMIUM\b/],
+  ["hemija",   /DETERD[ŽZ]|\bDET\.|\bARIEL\b|PERSIL|\bBONUX\b|OMEKSIVA[CČ]|\bLENOR\b|\bDUEL\b|\bFAIRY\b|PRONTO|DOMESTOS|\bSAVO\b|\bARF\b|\bCIF\b|\bBREF\b|TOALET|\bWC\b|UBRUS|MARAMIC|MARAMIČ|SUN[ĐD]ER|SUNDJER|\bKRPA|VLA[ŽZ]\.? ?MAR|SAPUN|[ŠS]AMPON|GEL ZA TU[ŠS]|PASTA ZA ZUBE|COLGATE|[ČC]ETKICA|DEZODOR|\bDEO\b|NIVEA|BRIJA[ČC]|GILLETTE|PELENE|ULO[ŠS]CI|ULO[ŠS]AK|TAMPON|\bVATA\b|KESE ZA SME|SREDSTVO ZA/],
   ["alkohol",  /\bPIVO\b|\bBEER\b|\bVINO\b|\bWINE\b|RAKIJA|VOTKA|VODKA|VISKI|WHISK|JAGERMEISTER|J[ÄA]GER|\bGIN\b|\bRUM\b|\bJELEN\b|ZAJE[ČC]ARSKO|HEINEKEN|TUBORG|CARLSBERG|STELLA ARTOIS|NIKSI[ČC]KO|\bLAV PIVO/],
 ];
 

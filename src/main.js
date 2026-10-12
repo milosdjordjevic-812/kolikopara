@@ -6,6 +6,7 @@ import { startCamera, grabFrame } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
 import { shouldPlayIntro, playIntro } from "./intro.js";
+import { basket, amountText } from "./items.js";
 import { rhythm, seriesDays, seriesWeeks, seriesMonths, categoryCompare, insights, nonEssential, habits } from "./stats.js";
 
 /* ---------- pomoćne ---------- */
@@ -20,6 +21,7 @@ const dShort = s => { const p = dParts(s); return String(p.d).padStart(2, "0") +
 const dDay = s => { const p = dParts(s); return DOW[new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay()] + " " + dShort(s) + p.y; };
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const racuna = n => (n % 10 === 1 && n % 100 !== 11 ? "račun" : "računa");
 const stavki = n => { const d = n % 10, h = n % 100; return n + " " + (d === 1 && h !== 11 ? "stavka" : (d >= 2 && d <= 4 && (h < 12 || h > 14)) ? "stavke" : "stavki"); };
 const puta = n => n + " " + (n % 10 === 1 && n % 100 !== 11 ? "put" : "puta");
 const PAYNAME = { gotovina: "Gotovina", kartica: "Kartica", racun: "Sa računa" };
@@ -126,11 +128,11 @@ function render() {
   tabbar(true);
   stopWallet(); applyTheme(getTheme()); app.classList.remove("is-empty");
   if (!S.ready) { app.innerHTML = `<div class="top"><div class="logo">[kolko para?]</div></div><div class="empty" style="margin-top:40px"><span class="meta dim">${esc(S.loadError || "Učitavam")}</span></div>`; return; }
-  const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore, profil: renderProfile }[S.view] || renderOverview;
+  const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore, profil: renderProfile, korpa: renderBasket }[S.view] || renderOverview;
   v();
 }
 function header() {
-  return `<div class="top"><div class="logo">[kolko para?]</div><div class="topr"><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više" })[S.view] || "")}</span>${avaBtn()}</div></div>${installHint()}`;
+  return `<div class="top"><div class="logo">[kolko para?]</div><div class="topr"><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više", korpa: "Korpa" })[S.view] || "")}</span>${avaBtn()}</div></div>${installHint()}`;
 }
 function tabbar(show) {
   let bar = document.querySelector(".tabbar");
@@ -203,7 +205,7 @@ function renderOverview() {
       <div><div class="label">Potrošeno</div><div class="big num">${money(T.spend)}</div></div>
       <button data-have aria-label="Koliko imaš"><div class="label">Ostalo</div>${b ? `<div class="big num">${b.now < 0 ? "-" : ""}${money(b.now)}</div>` : `<div class="big set">Upiši</div>`}</button>
     </div>
-    <div class="haverow"><button class="have add" data-income><span class="meta">+ Uplata</span></button><button class="have add" data-go="profil"><span class="meta">Statistika</span></button></div>
+    <div class="haverow"><button class="have add" data-income><span class="meta">+ Uplata</span></button><button class="have add" data-go="profil"><span class="meta">Statistika</span></button><button class="have add" data-go="korpa"><span class="meta">Korpa</span></button></div>
     <div class="wallet" id="wallet"></div>
     <div class="actions"><button class="cta big" data-scan>[ Skeniraj račun ]</button></div>
     <p class="sub"><span>${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno</span> ${money(T.spend / span)} dinara dnevno. <span>Bez prolaznog novca i prenosa između tvojih računa.</span></p>
@@ -489,6 +491,12 @@ function renderProfile() {
       : `<p class="note">Nema troškova na cigarete, alkohol, izlaske, dostavu, taksi i pretplate.</p>`}
   </section>
 
+  ${(() => { const bk = basket(L.filter(e => e.d >= dstrBack(td, 29))).filter(g => g.id !== "ostalo").slice(0, 6); return `<section>
+    <div class="sec-h"><h2>${icon("korpa", 26)} Šta kupuješ</h2><span class="meta dim">Poslednjih 30 dana, sa računa</span></div>
+    ${bk.length ? `<div class="facts">${bk.map(g => `<div><span class="meta dim">${esc(g.name)}</span><span>${esc(amountText(g))}, ${money(g.sum)} RSD</span></div>`).join("")}</div>` : `<p class="note">Kad skeniraš račune, ovde piše koliko čega kupuješ.</p>`}
+    <div class="row-btns" style="margin-top:14px"><button class="cta" data-go="korpa">[ Cela korpa ]</button></div>
+  </section>`; })()}
+
   <section>
     <div class="sec-h"><h2>${icon("navike", 26)} Navike</h2><span class="meta dim">Poslednjih 60 dana</span></div>
     <div class="facts">
@@ -565,6 +573,31 @@ async function saveCrop() {
   URL.revokeObjectURL(st.src);
   S.sheet = null; drawSheet();
   await saveProfile({ journal: data });
+}
+
+/* ---------- korpa: šta je kupljeno, po vrstama artikala ---------- */
+const dstrBack = (d, n) => { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - n); return t.toISOString().slice(0, 10); };
+function renderBasket() {
+  const td = today(), per = S.kper || "mesec", ym = td.slice(0, 7);
+  const pm = (() => { const [y, m] = ym.split("-").map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`; })();
+  const pick = { mesec: e => e.d.startsWith(ym), prosli: e => e.d.startsWith(pm), "30": e => e.d >= dstrBack(td, 29), sve: () => true }[per];
+  const all = list(), L = all.filter(pick), bk = basket(L);
+  const scanned = L.filter(e => e.receipt && (e.receipt.items || []).length).length;
+  const max = Math.max(1, ...bk.map(g => g.sum));
+  app.innerHTML = `${header()}
+  <div class="hero"><div><span class="eyebrow">[sa skeniranih računa]</span></div><h1>Korpa</h1>
+    <p class="lead">Koliko čega kupuješ, artikal po artikal, bez obzira u kojoj radnji. Cigarete iz Maxija i iz Univerexporta se sabiraju zajedno.</p></div>
+  <div class="periods" style="margin-top:22px">${[["mesec", "Ovaj mesec"], ["prosli", "Prošli mesec"], ["30", "30 dana"], ["sve", "Sve"]].map(([id, n]) => `<button class="chip" data-kper="${id}" aria-pressed="${per === id}">${n}</button>`).join("")}</div>
+  <p class="note">${scanned ? `${scanned} ${racuna(scanned)} sa artiklima.` : "U ovom periodu nema skeniranih računa sa artiklima."} Stavke iz banke nemaju artikle, pa se ovde ne vide.</p>
+  <section style="margin-top:22px">
+    <div class="rows">${bk.map(g => {
+      const open = S.kopen === g.id;
+      return `<button class="crow" data-kgrp="${g.id}" aria-expanded="${open}">${catIcon(g.icon, 22)}<span class="name">${esc(g.name)}</span><span class="amt num">${money(g.sum)}</span>
+        <span class="bar"><i style="width:${(g.sum / max * 100).toFixed(1)}%"></i></span><span class="meta dim">${esc(amountText(g))}</span></button>
+        ${open ? `<div class="kitems">${g.items.map(i => `<div class="krow"><span class="n">${esc(i.name)}</span><span class="v num">${money(i.sum, true)}</span>
+          <span class="meta dim">${esc(amountText({ ...g, pieces: i.pieces, weight: i.weight }))}, ${esc(i.stores.join(", "))}, poslednji put ${esc(dShort(i.last))}</span></div>`).join("")}</div>` : ""}`;
+    }).join("") || `<div class="empty"><span class="meta dim">Nema artikala</span></div>`}</div>
+  </section>`;
 }
 
 /* ---------- koliko imaš ---------- */
@@ -1044,6 +1077,8 @@ app.addEventListener("click", async ev => {
   if (t.closest("[data-scan]")) { openScan(); return; }
   if (t.closest("[data-have]")) { openHave(); return; }
   if (t.closest("[data-income]")) { openManual(true); return; }
+  const kp = t.closest("[data-kper]"); if (kp) { S.kper = kp.dataset.kper; S.kopen = null; render(); return; }
+  const kg = t.closest("[data-kgrp]"); if (kg) { S.kopen = S.kopen === kg.dataset.kgrp ? null : kg.dataset.kgrp; const y = window.scrollY; render(); window.scrollTo(0, y); return; }
   const chm = t.closest("[data-chart]"); if (chm) { S.chart = chm.dataset.chart; const y = window.scrollY; render(); window.scrollTo(0, y); return; }
   const th = t.closest("[data-theme-set]"); if (th) { setTheme(th.dataset.themeSet); render(); return; }
   if (t.closest("[data-dismiss-install]")) { try { localStorage.setItem("kp-install", "1"); } catch (_) {} render(); return; }
