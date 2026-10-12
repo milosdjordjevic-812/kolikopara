@@ -132,7 +132,8 @@ export function parseIps(text) {
 // u adresi i sa nevidljivim znakovima oko teksta. Parametar vl (potpisan sadržaj računa) ostaje netaknut.
 export function fiscalUrl(s) {
   const t = String(s || "").replace(/[\u0000-\u001f\u007f\u200b\ufeff]/g, "").trim();
-  const m = t.match(/suf\.purs\.gov\.rs\/v\/?\?(?:[^#\s]*?&)?vl=([A-Za-z0-9%+/=_\-]{40,})/i);
+  // adresa može da ima i port, npr. https://suf.purs.gov.rs:443/v/?vl=...
+  const m = t.match(/suf\.purs\.gov\.rs(?::\d+)?\/v\/?\?(?:[^#\s]*?&)?vl=([A-Za-z0-9%+/=_\-]{40,})/i);
   return m ? "https://suf.purs.gov.rs/v/?vl=" + m[1] : null;
 }
 export const isFiscalUrl = s => !!fiscalUrl(s);

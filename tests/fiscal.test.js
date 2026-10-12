@@ -133,5 +133,6 @@ test("link fiskalnog računa se prepoznaje i kad nije potpun", async () => {
   const vl = "AzRHU1AyN1hWNEdTUDI3WFbDEQQAcRAEAFBKTwIAAAAAAAABoTAm1ScAAABE4REk2vXndlKk%2Ft0";
   assert.equal(fiscalUrl("https://suf.purs.gov.rs/v/?vl=" + vl), "https://suf.purs.gov.rs/v/?vl=" + vl);
   assert.equal(fiscalUrl("﻿suf.purs.gov.rs/v/?vl=" + vl + " "), "https://suf.purs.gov.rs/v/?vl=" + vl);
+  assert.equal(fiscalUrl("https://suf.purs.gov.rs:443/v/?vl=" + vl), "https://suf.purs.gov.rs/v/?vl=" + vl);
   assert.equal(fiscalUrl("https://example.com/?vl=" + vl), null);
 });
