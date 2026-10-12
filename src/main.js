@@ -810,7 +810,7 @@ async function handleQr(text) {
     if (hint) hint.textContent = "Čitam račun kod Poreske uprave";
     try {
       const r = await fetch("/api/receipt", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: text.trim() }) });
-      const j = await r.json();
+      const j = await r.json().catch(() => ({ error: "Račun nije pročitan. Proveri internet i probaj ponovo." }));
       if (!r.ok) throw new Error(j.error || "Račun nije pročitan.");
       closeCam();
       if (j.issuedAt && sameReceipt(j.issuedAt, Math.abs(j.total))) { toast("Ovaj račun je već sačuvan."); return; }

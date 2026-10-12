@@ -1,6 +1,23 @@
 // Kamera i čitanje QR koda. Vraća tekst iz QR-a preko onResult.
 import jsQR from "jsqr";
 
+// ZXing (zxing-cpp u WebAssembly) čita gust i mutan QR sa fiskalnog računa mnogo bolje od jsQR.
+// Učitava se tek kad se otvori kamera; jsQR ostaje kao rezerva ako se ZXing ne učita.
+let zxP = null;
+function zx() {
+  if (!zxP) zxP = import("zxing-wasm/reader").then(m => {
+    m.prepareZXingModule({ overrides: { locateFile: (path, prefix) => (path.endsWith(".wasm") ? "/zxing/zxing_reader.wasm" : prefix + path) } });
+    return m;
+  }).catch(e => { zxP = null; throw e; });
+  return zxP;
+}
+export const warmQr = () => zx().catch(() => {});
+async function decodeZx(img) {
+  const m = await zx();
+  const r = await m.readBarcodes(img, { formats: ["QRCode"], tryHarder: true, maxNumberOfSymbols: 1 });
+  return r.length && r[0].text ? r[0].text : null;
+}
+
 export function decodeImageData(img) {
   const r = jsQR(img.data, img.width, img.height, { inversionAttempts: "attemptBoth" });
   if (!r) return null;
@@ -28,25 +45,39 @@ export async function decodeFile(file) {
 
 // accept: da li je pročitan tekst ono što tražimo; ako nije, kamera nastavlja da čita (onReject javlja šta je pročitano)
 export function startCamera(video, onResult, onError, accept = () => true, onReject = () => {}) {
-  let stream = null, raf = 0, stopped = false, last = 0, n = 0;
+  let stream = null, raf = 0, stopped = false, last = 0, busy = false, n = 0, useZx = true;
   const canvas = document.createElement("canvas");
   const g = canvas.getContext("2d", { willReadFrequently: true });
+  zx().catch(() => { useZx = false; });
 
   const tick = t => {
     if (stopped) return;
     raf = requestAnimationFrame(tick);
-    if (t - last < 160 || video.readyState < 2) return;
+    if (busy || t - last < 120 || video.readyState < 2) return;
     last = t;
     const w = video.videoWidth, h = video.videoHeight;
     if (!w || !h) return;
-    // naizmenično: centralni kvadrat u manjoj rezoluciji (brzo) i veći isečak u većoj (gust QR sa fiskalnog računa)
-    const big = n++ % 2 === 1;
-    const side = Math.min(w, h) * (big ? 0.95 : 0.8), sx = (w - side) / 2, sy = (h - side) / 2, out = Math.round(Math.min(big ? 1200 : 720, side));
-    canvas.width = out; canvas.height = out;
-    g.drawImage(video, sx, sy, side, side, 0, 0, out, out);
-    const text = decodeImageData(g.getImageData(0, 0, out, out));
-    if (!text) return;
-    if (accept(text)) { stop(); onResult(text); } else onReject(text);
+    let img;
+    if (useZx) {
+      // ceo kadar, najviše 1600 px po dužoj strani
+      const k = Math.min(1, 1600 / Math.max(w, h));
+      canvas.width = Math.round(w * k); canvas.height = Math.round(h * k);
+      g.drawImage(video, 0, 0, canvas.width, canvas.height);
+    } else {
+      // jsQR: naizmenično centralni kvadrat i veći isečak
+      const big = n++ % 2 === 1;
+      const side = Math.min(w, h) * (big ? 0.95 : 0.8), out = Math.round(Math.min(big ? 1200 : 720, side));
+      canvas.width = out; canvas.height = out;
+      g.drawImage(video, (w - side) / 2, (h - side) / 2, side, side, 0, 0, out, out);
+    }
+    img = g.getImageData(0, 0, canvas.width, canvas.height);
+    busy = true;
+    (useZx ? decodeZx(img).catch(() => { useZx = false; return decodeImageData(img); }) : Promise.resolve(decodeImageData(img)))
+      .then(text => {
+        busy = false;
+        if (stopped || !text) return;
+        if (accept(text)) { stop(); onResult(text); } else onReject(text);
+      });
   };
 
   function stop() {
