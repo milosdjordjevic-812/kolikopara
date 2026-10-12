@@ -80,3 +80,22 @@ test("račun upisan posle stanja ostaje oduzet i kad stigne izvod istog dana", a
   st = { tx: [{ id: "b", d: "2026-10-12", t: "MAXI 451 BEOGRAD", a: -3875.08 }], receipts: [stanje, maxi] };
   assert.equal(balance(st.receipts, derive(st)).now, 6124.92);
 });
+
+test("kasica: gotovina stavljena u kasicu nije potrošena, ali se skida sa Koliko imaš", async () => {
+  const { derive, balance, totals, savings } = await import("../src/logic.js");
+  const m = (id, cat, total, extra = {}) => ({ id, kind: "manual", cat, total, issued_at: "2026-10-13T12:00:00", created_at: "2026-10-13T10:0" + id + ":00Z", payment: "gotovina", refund: false, items: [], person: "", merchant: "", ...extra });
+  const stanje = { ...m("0", "stanje", 50000, { payment: "racun" }), issued_at: "2026-10-12T12:00:00" };
+  const atm = { id: "a", d: "2026-10-13", t: "BANKOMAT RAIFFEISEN", a: -10000 };
+  const u = m("1", "stednja", 8000), kafa = m("2", "izlasci", 500), iz = m("3", "stednja", 1000, { refund: true });
+  const cilj = m("4", "cilj", 100000, { merchant: "Letovanje" });
+  const st = { tx: [atm], receipts: [stanje, u, kafa, iz, cilj] };
+  const L = derive(st), T = totals(L);
+  // podignuto 10.000: 8.000 u kasicu, 500 kafa, 1.500 nepoznato
+  assert.equal(T.spend, 2000);
+  assert.equal(T.saved, 7000);
+  assert.equal(balance(st.receipts, L).now, 50000 - 2000 - 7000);
+  const sv = savings(st.receipts);
+  assert.equal(sv.total, 7000);
+  assert.deepEqual([sv.goal.name, sv.goal.amount, sv.left, sv.pct], ["Letovanje", 100000, 93000, 7]);
+  assert.equal(L.find(e => e.id === "r:1").name, "U kasicu");
+});

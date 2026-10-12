@@ -333,3 +333,7 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 @keyframes kp-listen { 50% { opacity: .78 } }
 .cam .bottom .btn svg { vertical-align: -3px }
 .cam .bottom [data-voice] { display: inline-flex; align-items: center; gap: 6px }
+
+/* štednja */
+.goalbar { height: 6px; width: min(280px, 80%); margin: 14px auto 0; background: rgba(236,231,216,.16) }
+.goalbar i { display: block; height: 100%; background: var(--band-ink) }

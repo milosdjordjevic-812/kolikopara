@@ -19,20 +19,22 @@ export const NONESSENTIAL = ["cigarete", "alkohol", "izlasci", "dostava", "taksi
  * sa računa (npr. gotovinska uplata). Zbir svih dana je isti kao potrošnja u pregledu.
  */
 export function dailySpend(list) {
-  const nonCash = {}, W = {}, C = {};
+  const nonCash = {}, W = {}, C = {}, SV = {};
   for (const e of list) for (const p of e.parts) {
     const c = CAT[p.cat]; if (!c) continue;
     if (p.cat === "gotovina") { W[e.d] = (W[e.d] || 0) - p.amount; continue; }
+    if (p.cat === "stednja") { if (p.amount < 0) SV[e.d] = (SV[e.d] || 0) - p.amount; continue; }
     if (c.kind !== "spend") continue;
     if (e.cash) C[e.d] = (C[e.d] || 0) - p.amount; else nonCash[e.d] = (nonCash[e.d] || 0) - p.amount;
   }
-  const days = [...new Set([...Object.keys(nonCash), ...Object.keys(W), ...Object.keys(C)])].sort();
+  const days = [...new Set([...Object.keys(nonCash), ...Object.keys(W), ...Object.keys(C), ...Object.keys(SV)])].sort();
   // gotovina se sabira u okviru meseca, kao u pregledu, pa se mesečni zbirovi slažu
-  const out = {}; let cw = 0, cc = 0, counted = 0, mon = "";
+  const out = {}; let cw = 0, cc = 0, cs = 0, counted = 0, mon = "";
   for (const d of days) {
-    if (d.slice(0, 7) !== mon) { mon = d.slice(0, 7); cw = cc = counted = 0; }
-    cw += W[d] || 0; cc += C[d] || 0;
-    const now = Math.max(cw, cc), cash = now - counted; counted = now;
+    if (d.slice(0, 7) !== mon) { mon = d.slice(0, 7); cw = cc = cs = counted = 0; }
+    cw += W[d] || 0; cc += C[d] || 0; cs += SV[d] || 0;
+    // podignuta gotovina stavljena u kasicu nije potrošnja
+    const now = Math.max(cw - cs, cc, 0), cash = now - counted; counted = now;
     out[d] = r2((nonCash[d] || 0) + cash);
   }
   return out;

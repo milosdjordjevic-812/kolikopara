@@ -25,9 +25,11 @@ export const CATS = [
   { id: "interno",      name: "Između mojih računa", kind: "neutral" },
   { id: "priliv",       name: "Priliv",              kind: "income" },
   { id: "prolazno",     name: "Prolazno",            kind: "pass" },
+  { id: "stednja",      name: "Štednja",             kind: "save" },
 ];
 // zapisi u tabeli računa koji nisu stavke: stanje (koliko imaš na neki dan) i profil (ime i slika)
-export const META_CATS = new Set(["stanje", "profil"]);
+// "cilj" je cilj štednje (naziv i iznos); uplate u kasicu su stavke sa kategorijom "stednja"
+export const META_CATS = new Set(["stanje", "profil", "cilj"]);
 export const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 export const catName = id => (CAT[id] || CAT.nerazvrstano).name;
 
@@ -133,7 +135,7 @@ export function derive(state) {
   const recs = receipts.filter(r => !META_CATS.has(r.cat)).sort((a, b) => (a.issued_at < b.issued_at ? -1 : 1));
   const taken = new Set();
   for (const rc of recs) {
-    if (rc.payment === "gotovina") continue;
+    if (rc.payment === "gotovina" || rc.cat === "stednja") continue;
     const target = rc.refund ? Math.abs(rc.total) : -Math.abs(rc.total);
     const rd = dayNum(rc.issued_at);
     let best = null, bestGap = 99;
@@ -167,8 +169,9 @@ export function derive(state) {
       cash: rc.payment === "gotovina", pending: rc.payment !== "gotovina",
       cat: base, person: rc.person || "", manual: !!rc.cat,
     };
-    e.parts = base === "prolazno"
-      ? [{ cat: "prolazno", amount, person: rc.person || "" }]
+    if (base === "stednja") { e.cash = true; e.pending = false; e.t = e.name = rc.refund ? "Iz kasice" : "U kasicu"; }
+    e.parts = base === "prolazno" || base === "stednja"
+      ? [{ cat: base, amount, person: rc.person || "" }]
       : itemParts(rules, rc.items || [], amount, base, sign);
     out.push(e);
   }
@@ -229,23 +232,25 @@ function itemParts(rules, items, amount, base, sign) {
 
 /* Zbirovi za period. Gotovina se umanjuje za račune plaćene gotovinom. */
 export function totals(list) {
-  const by = {}; let bankSpend = 0, inc = 0, W = 0, C = 0, feeConv = 0;
+  const by = {}; let bankSpend = 0, inc = 0, W = 0, C = 0, feeConv = 0, Sdep = 0, Snet = 0;
   const add = (cat, v) => { (by[cat] ||= { sum: 0, n: 0 }); by[cat].sum = r2(by[cat].sum + v); by[cat].n++; };
   for (const e of list) {
     if (e.fee) feeConv += -e.fee;
     for (const p of e.parts) {
       const c = CAT[p.cat] || CAT.nerazvrstano;
       if (p.cat === "gotovina") { W += -p.amount; continue; }
+      // gotovina stavljena u kasicu nije potrošena; uzeta iz kasice vraća se u ono što imaš
+      if (p.cat === "stednja") { Snet += -p.amount; if (p.amount < 0) Sdep += -p.amount; continue; }
       add(c.id, p.amount);
       if (c.kind === "spend") { if (e.cash) C += -p.amount; else bankSpend += -p.amount; }
       if (p.amount > 0 && (e.type === "bank" ? c.kind !== "pass" : c.kind === "income")) inc += p.amount;
     }
   }
   const nWithdrawals = list.filter(e => e.parts.some(p => p.cat === "gotovina")).length;
-  const unexplained = Math.max(0, r2(W - C));
+  const unexplained = Math.max(0, r2(W - C - Sdep));
   if (unexplained > 0) { by.gotovina = { sum: -unexplained, n: nWithdrawals }; }
   const spend = r2(bankSpend + C + unexplained);
-  return { by, spend, inc: r2(inc), withdrawn: r2(W), cashReceipts: r2(C), unexplained, feeConv: r2(feeConv) };
+  return { by, spend, inc: r2(inc), withdrawn: r2(W), cashReceipts: r2(C), unexplained, feeConv: r2(feeConv), saved: r2(Snet) };
 }
 
 /*
@@ -261,11 +266,20 @@ export function balance(receipts, list) {
   // (i račun koji je kasnije uparen sa izvodom istog dana: vreme upisa se gleda na računu)
   const after = list.filter(e => e.d > d0 || (e.d === d0 && e.receipt && String(e.receipt.created_at || "") > at));
   const T = totals(after);
-  return { start: Number(st.total), d0, row: st, inc: T.inc, spend: T.spend, now: r2(Number(st.total) + T.inc - T.spend), n: after.length };
+  return { start: Number(st.total), d0, row: st, inc: T.inc, spend: T.spend, saved: T.saved, now: r2(Number(st.total) + T.inc - T.spend - T.saved), n: after.length };
 }
 
 export function stableId(d, t, a, occ) {
   let h = 5381; const s = `${d}|${t}|${Number(a).toFixed(2)}|${occ}`;
   for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   return d.replace(/-/g, "") + h.toString(36);
+}
+
+/* Kasica: koliko je ušteđeno ukupno, cilj i istorija (najnovije prvo). */
+export function savings(receipts) {
+  const rows = receipts.filter(r => r.cat === "stednja").sort((a, b) => String(b.issued_at).localeCompare(String(a.issued_at)) || String(b.created_at || "").localeCompare(String(a.created_at || "")));
+  const total = r2(rows.reduce((s, r) => s + (r.refund ? -1 : 1) * Math.abs(Number(r.total) || 0), 0));
+  const g = receipts.filter(r => r.cat === "cilj").sort((a, b) => String(a.created_at || a.issued_at).localeCompare(String(b.created_at || b.issued_at))).pop();
+  const goal = g && Number(g.total) > 0 ? { name: g.merchant || "", amount: Number(g.total), row: g } : null;
+  return { total, rows, goal, left: goal ? Math.max(0, r2(goal.amount - total)) : 0, pct: goal ? Math.min(100, Math.round(total / goal.amount * 100)) : 0 };
 }

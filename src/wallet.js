@@ -5,13 +5,17 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { buildPiggy } from "./piggy.js";
 
 const cache = {};
-const loadModel = url => (cache[url] ||= new GLTFLoader().loadAsync(url));
+// url može biti i funkcija koja sklopi model u kodu (kasica)
+const loadModel = (url, o) => typeof url === "function" ? Promise.resolve({ scene: url(o) }) : (cache[url] ||= new GLTFLoader().loadAsync(url));
 
 export const mountWallet = (el, o = {}) => mountModel(el, { url: "/models/novcanik.glb", ...o });
 export const mountCard = (el, o = {}) => mountModel(el, { url: "/models/kartica.glb", period: 22, ...o });
-export const mountNamed = (el, name, o = {}) => mountModel(el, { url: `/models/${name}.glb`, period: 24, ...o });
+export const mountNamed = (el, name, o = {}) => name === "kasica"
+  ? mountModel(el, { url: buildPiggy, period: 16, zoom: 0.78, ...o })
+  : mountModel(el, { url: `/models/${name}.glb`, period: 24, ...o });
 
 // still: ugao u radijanima za mirnu sliku bez okretanja (koristi se i za ikonicu appa)
 export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width = 1.15, period = 18, still = null, zoom = 0.9, mask = false } = {}) {
@@ -27,13 +31,14 @@ export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width 
   const camera = new PerspectiveCamera(26, 1, 0.1, 200);
   const spin = new Group(); scene.add(spin);
   const mats = [];
-  let disposed = false, raf = 0, visible = true, t0 = performance.now();
+  let disposed = false, raf = 0, visible = true, t0 = performance.now(), tick = null;
 
-  loadModel(url).then(gltf => {
+  loadModel(url, { line, fill }).then(gltf => {
     if (disposed) return;
-    const root = gltf.scene.clone(true);
+    const root = typeof url === "function" ? gltf.scene : gltf.scene.clone(true);
     const toAdd = [];
     root.traverse(o => {
+      if (o.isMesh && o.userData.keep) return;
       if (o.isMesh) {
         o.material = new MeshBasicMaterial({ color: new Color(fill), colorWrite: !mask, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
         if (mask) o.renderOrder = -1;
@@ -59,7 +64,8 @@ export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width 
     for (const [parent, seg, replace] of toAdd) { parent.add(seg); if (replace) parent.remove(replace); }
     const box = new Box3().setFromObject(root), c = box.getCenter(new Vector3()), size = box.getSize(new Vector3());
     root.position.sub(c);
-    spin.add(root);
+    spin.add(root); tick = root.userData.tick || null;
+    if (reduce && root.userData.still) root.userData.still();
     const r = size.length() / 2;
     const dist = r / Math.sin((camera.fov * Math.PI / 180) / 2) * zoom;
     camera.position.set(0, r * 0.55, dist);
@@ -78,6 +84,7 @@ export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width 
     const s = (t - t0) / 1000;
     spin.rotation.y = still !== null ? still : reduce ? 0.6 : s * (Math.PI * 2 / period);   // jedan krug za period sekundi
     spin.rotation.x = reduce ? 0 : Math.sin(s * 0.5) * 0.05;
+    if (tick && !reduce) tick(s);
     renderer.render(scene, camera);
     if (!reduce && visible && !document.hidden) raf = requestAnimationFrame(frame);
   }
