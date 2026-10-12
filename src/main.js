@@ -199,7 +199,7 @@ function renderOverview() {
     ${installHint()}
     ${periodChips()}
     <div style="margin-top:26px"><span class="eyebrow">[${from ? esc(dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
-    <div class="duo">
+    <div class="duo${(money(T.spend) + (b ? money(b.now) : "")).length > 13 ? " long" : ""}">
       <div><div class="label">Potrošeno</div><div class="big num">${money(T.spend)}</div></div>
       <button data-have aria-label="Koliko imaš"><div class="label">Ostalo</div>${b ? `<div class="big num">${b.now < 0 ? "-" : ""}${money(b.now)}</div>` : `<div class="big set">Upiši</div>`}</button>
     </div>

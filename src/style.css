@@ -259,11 +259,13 @@ section { margin-top: 52px }
 .band .pname { margin-top: 14px; font-weight: 500; font-size: 15px; letter-spacing: .16em; text-transform: uppercase }
 
 /* početna: potrošeno i ostalo jedno pored drugog */
-.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 22px; align-items: end }
-.duo > * { min-width: 0 }
-.duo button { border: 0; background: transparent; color: inherit; padding: 0; font: inherit; cursor: pointer }
+/* par se centrira kao celina, bez obzira koliko je koji broj dugačak */
+.duo { display: flex; justify-content: center; align-items: flex-end; margin-top: 22px }
+.duo > * { min-width: 0; padding: 0 18px }
+.duo button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer }
 .duo .label { margin-top: 0 }
-.duo .big { margin-top: 8px; font-size: clamp(34px, 10.5vw, 64px); line-height: .9; font-weight: 500; letter-spacing: -.03em; color: var(--band-ink); white-space: nowrap }
+.duo .big { margin-top: 8px; font-size: clamp(30px, 9.5vw, 60px); line-height: .9; font-weight: 500; letter-spacing: -.03em; color: var(--band-ink); white-space: nowrap; font-variant-numeric: proportional-nums }
+.duo.long .big { font-size: clamp(24px, 7.4vw, 48px) }
 .duo > :first-child { border-right: 1px solid rgba(236,231,216,.22) }
 .duo .big.set { font-size: clamp(20px, 6vw, 30px); text-transform: uppercase; text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px }
 
