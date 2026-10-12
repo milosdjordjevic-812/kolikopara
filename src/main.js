@@ -1,11 +1,12 @@
 import "./style.css";
 import { sb, configured, loadAll, saveOverride, deleteOverride, saveRule, deleteRule, insertReceipt, updateReceipt, deleteReceipt, replaceBankRange, importBackup, exportBackup } from "./db.js";
-import { CATS, CAT, catName, derive, totals, balance, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
+import { CATS, CAT, catName, derive, totals, balance, META_CATS, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
 import { parseIps, isFiscalUrl } from "./shared/fiscal.js";
 import { startCamera, grabFrame } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
 import { shouldPlayIntro, playIntro } from "./intro.js";
+import { rhythm, seriesDays, seriesWeeks, seriesMonths, categoryCompare, insights, nonEssential, habits } from "./stats.js";
 
 /* ---------- pomoćne ---------- */
 const nf0 = new Intl.NumberFormat("sr-Latn-RS", { maximumFractionDigits: 0 });
@@ -30,21 +31,24 @@ function applyTheme(t) {
   if (t === "svetla") root.dataset.theme = "light"; else if (t === "tamna") root.dataset.theme = "dark"; else delete root.dataset.theme;
   const dark = t === "tamna" || (t === "sistem" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.remove());
-  const m = document.createElement("meta"); m.name = "theme-color"; m.content = S.view === "pregled" ? "#73393a" : dark ? "#1b1813" : "#e3e0d2";
+  const m = document.createElement("meta"); m.name = "theme-color"; m.content = S.view === "pregled" || S.view === "profil" ? "#73393a" : dark ? "#1b1813" : "#e3e0d2";
   document.head.appendChild(m);
 }
 function setTheme(t) { try { localStorage.setItem("kp-theme", t); } catch (_) {} applyTheme(t); }
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => applyTheme(getTheme()));
 
 /* ---------- novčanik u uvodnoj traci ---------- */
-let unmountWallet = null;
-function stopWallet() { if (unmountWallet) { unmountWallet(); unmountWallet = null; } }
+let unmounts = [];
+function stopWallet() { unmounts.forEach(f => f()); unmounts = []; }
 function startWallet() {
-  const el = document.getElementById("wallet") || document.getElementById("card"); if (!el) return;
-  import("./wallet.js").then(({ mountWallet, mountCard }) => {
-    if (!document.body.contains(el)) return;
+  const els = [...document.querySelectorAll("#app #wallet, #app #card, #app [data-model]")];
+  if (!els.length) return;
+  import("./wallet.js").then(({ mountWallet, mountCard, mountNamed }) => {
     stopWallet();
-    unmountWallet = el.id === "card" ? mountCard(el) : mountWallet(el);
+    for (const el of els) {
+      if (!document.body.contains(el)) continue;
+      unmounts.push(el.id === "card" ? mountCard(el) : el.dataset.model ? mountNamed(el, el.dataset.model) : mountWallet(el));
+    }
   }).catch(() => {});
 }
 
@@ -68,6 +72,7 @@ async function guard(fn, okMsg) {
   try { const r = await fn(); if (okMsg) toast(okMsg); return r ?? true; }
   catch (e) { console.error(e); toast(e && e.code === "23505" ? "Ovo je već sačuvano." : "Nije sačuvano. Proveri internet i probaj ponovo."); return false; }
 }
+
 
 /* ---------- prijava ---------- */
 function renderAuth(mode = "in", err = "") {
@@ -108,6 +113,12 @@ function periods() { return [...new Set(list().map(e => e.d.slice(0, 7)))].sort(
 const inPeriod = e => S.period === "sve" || e.d.startsWith(S.period);
 const lastBank = () => S.data.tx.reduce((m, r) => (r.d > m ? r.d : m), "");
 
+/* ---------- profil: ime i slika (zapis u tabeli računa, cat = profil) ---------- */
+const profRow = () => S.data.receipts.find(r => r.cat === "profil");
+const avaSrc = () => profRow()?.journal || "";
+const avaHtml = size => avaSrc() ? `<img alt="" src="${esc(avaSrc())}">` : icon("osoba", size);
+const avaBtn = () => `<button class="ava" data-go="profil" aria-label="Profil">${avaHtml(20)}</button>`;
+
 /* ---------- okvir ---------- */
 function render() {
   if (!configured) { app.innerHTML = `<div class="auth"><div class="logo">[kolko para?]</div><h2>Fale podešavanja</h2><p class="lead">Nedostaju adresa i ključ Supabase baze. Dodaj ih u Vercel podešavanjima kao VITE_SUPABASE_URL i VITE_SUPABASE_ANON_KEY, pa ponovo objavi.</p></div>`; return; }
@@ -115,11 +126,11 @@ function render() {
   tabbar(true);
   stopWallet(); applyTheme(getTheme()); app.classList.remove("is-empty");
   if (!S.ready) { app.innerHTML = `<div class="top"><div class="logo">[kolko para?]</div></div><div class="empty" style="margin-top:40px"><span class="meta dim">${esc(S.loadError || "Učitavam")}</span></div>`; return; }
-  const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore }[S.view];
+  const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore, profil: renderProfile }[S.view] || renderOverview;
   v();
 }
 function header() {
-  return `<div class="top"><div class="logo">[kolko para?]</div><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više" })[S.view])}</span></div>${installHint()}`;
+  return `<div class="top"><div class="logo">[kolko para?]</div><div class="topr"><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više" })[S.view] || "")}</span>${avaBtn()}</div></div>${installHint()}`;
 }
 function tabbar(show) {
   let bar = document.querySelector(".tabbar");
@@ -153,7 +164,7 @@ function renderOverview() {
   if (!all.length) {
     app.classList.add("is-empty");
     app.innerHTML = `<div class="band fill">
-      <div class="top"><div class="logo">[kolko para?]</div></div>
+      <div class="top"><div class="logo">[kolko para?]</div>${avaBtn()}</div>
       ${installHint()}
       <div class="mid">
         <div><span class="eyebrow">[još nema stavki]</span></div>
@@ -182,14 +193,17 @@ function renderOverview() {
   const lb = lastBank(), stale = lb && (Date.parse(today()) - Date.parse(lb)) / 864e5 > 10;
   const pending = L.filter(e => e.type === "receipt" && e.pending).length;
 
+  const b = bal();
   app.innerHTML = `<div class="band">
-    <div class="top"><div class="logo">[kolko para?]</div></div>
+    <div class="top"><div class="logo">[kolko para?]</div>${avaBtn()}</div>
     ${installHint()}
     ${periodChips()}
     <div style="margin-top:26px"><span class="eyebrow">[${from ? esc(dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
-    <div class="label">Potrošeno</div>
-    <h1 class="num">${money(T.spend)}<span class="rsd">RSD</span></h1>
-    ${haveLine()}
+    <div class="duo">
+      <div><div class="label">Potrošeno</div><div class="big num">${money(T.spend)}</div></div>
+      <button data-have aria-label="Koliko imaš"><div class="label">Ostalo</div>${b ? `<div class="big num">${b.now < 0 ? "-" : ""}${money(b.now)}</div>` : `<div class="big set">Upiši</div>`}</button>
+    </div>
+    <div class="haverow"><button class="have add" data-income><span class="meta">+ Uplata</span></button><button class="have add" data-go="profil"><span class="meta">Statistika</span></button></div>
     <div class="wallet" id="wallet"></div>
     <div class="actions"><button class="cta big" data-scan>[ Skeniraj račun ]</button></div>
     <p class="sub"><span>${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno</span> ${money(T.spend / span)} dinara dnevno. <span>Bez prolaznog novca i prenosa između tvojih računa.</span></p>
@@ -385,6 +399,174 @@ async function doImport(rows) {
   } else renderMore();
 }
 
+/* ---------- profil i statistika ---------- */
+const PCT = (a, b) => (b > 0 ? Math.round((a / b - 1) * 100) : null);
+function cmpLine(now, base, word) {
+  if (!(now > 0)) return `<span class="meta dim">Još ništa</span>`;
+  const p = PCT(now, base);
+  if (p === null) return `<span class="meta dim">${esc(word)}: nema podataka</span>`;
+  if (Math.abs(p) < 5) return `<span class="meta dim">Kao ${esc(word)}</span>`;
+  return `<span class="meta ${p > 0 ? "up" : "down"}">${p > 0 ? "+" : ""}${p}% od ${esc(word)}</span>`;
+}
+// stubići: jedna serija, poslednji (tekući) istaknut, isprekidana linija proseka, dodir pokazuje iznos
+function barChart(data, { label, avg = null, id }) {
+  const W = 360, H = 150, top = 14, bot = 22, n = data.length;
+  const max = Math.max(1, ...data.map(d => d.v), avg || 0) * 1.08;
+  const bw = (W - (n - 1) * 2) / n, y = v => top + (H - top - bot) * (1 - v / max);
+  const bars = data.map((d, i) => {
+    const x = i * (bw + 2), h = Math.max(d.v > 0 ? 1.5 : 0, H - bot - y(d.v)), r = Math.min(3, bw / 2, h);
+    const cur = i === n - 1;
+    const path = h > 0 ? `M${x},${H - bot}V${H - bot - h + r}Q${x},${H - bot - h} ${x + r},${H - bot - h}H${x + bw - r}Q${x + bw},${H - bot - h} ${x + bw},${H - bot - h + r}V${H - bot}Z` : "";
+    return `<g class="bar${cur ? " cur" : ""}" data-tip="${esc(label(d) + ": " + money(d.v) + " RSD")}"><rect x="${x - 1}" y="0" width="${bw + 2}" height="${H}" fill="transparent"/>${path ? `<path d="${path}"/>` : ""}</g>`;
+  }).join("");
+  const ticks = [0, Math.floor((n - 1) / 2), n - 1].map(i => `<text x="${i === 0 ? 0 : i === n - 1 ? W : i * (bw + 2) + bw / 2}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}">${esc(label(data[i]))}</text>`).join("");
+  const avgLine = avg ? `<line class="avg" x1="0" x2="${W}" y1="${y(avg)}" y2="${y(avg)}"/>` : "";
+  return `<div class="chart" id="${id}"><div class="tip meta dim" aria-live="polite">Dodirni stubić za iznos</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Grafikon potrošnje"><line class="base" x1="0" x2="${W}" y1="${H - bot}" y2="${H - bot}"/>${bars}${avgLine}${ticks}</svg></div>`;
+}
+const MON3 = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "avg", "sep", "okt", "nov", "dec"];
+function renderProfile() {
+  const L = list(), td = today(), b = bal(), pr = profRow();
+  const R = rhythm(L, td), ins = insights(L, td, b), ne = nonEssential(L, td), hb = habits(L, td), cc = categoryCompare(L, td).slice(0, 7);
+  const mode = S.chart || "dani";
+  const chart = mode === "nedelje"
+    ? barChart(seriesWeeks(R.daily, td, 10), { id: "ch", label: d => dShort(d.key) })
+    : mode === "meseci"
+      ? barChart(seriesMonths(L, td, 6), { id: "ch", label: d => MON3[+d.key.slice(5) - 1] })
+      : barChart(seriesDays(R.daily, td, 30), { id: "ch", label: d => dShort(d.key), avg: R.avg30 });
+  const ccMax = Math.max(1, ...cc.map(r => Math.max(r.now, r.before)));
+  const WD = ["ponedeljkom", "utorkom", "sredom", "četvrtkom", "petkom", "subotom", "nedeljom"];
+  const tile = (name, v, cmp) => `<div class="tile"><span class="meta dim">${name}</span><span class="v num">${money(v)}</span>${cmp}</div>`;
+  app.innerHTML = `<div class="band prof">
+    <div class="top"><div class="logo">[kolko para?]</div>${avaBtn()}</div>
+    <label class="ava big" aria-label="Promeni sliku"><input type="file" id="ava-file" accept="image/*" hidden>${avaHtml(48)}</label>
+    <div class="pname">${esc(pr?.merchant || "Profil")}</div>
+    ${b ? `<div class="label">Ostalo</div><h1 class="num">${b.now < 0 ? "-" : ""}${money(b.now)}<span class="rsd">RSD</span></h1>
+      <p class="sub"><span>Stanje ${esc(dShort(b.d0))}</span> ${money(b.start)}<span>, uplate</span> ${b.inc ? "+" : ""}${money(b.inc)}<span>, potrošeno</span> ${b.spend ? "-" : ""}${money(b.spend)}</p>`
+      : `<p class="sub"><span>Upiši koliko imaš, pa ovde pratiš stanje kao u banci.</span></p>`}
+    <div class="haverow"><button class="have add" data-income><span class="meta">+ Uplata</span></button><button class="have add" data-have><span class="meta">${b ? "Ispravi stanje" : "Upiši stanje"}</span></button></div>
+    <div class="wallet" data-model="novcanice"></div>
+  </div>
+
+  <section>
+    <div class="sec-h"><h2>${icon("ritam", 26)} Ritam</h2><span class="meta dim">Bez prolaznog novca</span></div>
+    <div class="tiles">
+      ${tile("Danas", R.today, cmpLine(R.today, R.avg30, "proseka"))}
+      ${tile("Ova nedelja", R.week, cmpLine(R.week, R.lastWeekSame, "prošle"))}
+      ${tile("Ovaj mesec", R.month, R.hasLastMonth ? cmpLine(R.month, R.lastMonthSame, "prošlog") : `<span class="meta dim">Do danas</span>`)}
+      ${tile("Prošli mesec", R.lastMonth, `<span class="meta dim">${R.hasLastMonth ? "Ceo mesec" : "Samo deo meseca u appu"}</span>`)}
+    </div>
+    <p class="note">Prosečan dan poslednjih 30 dana: <b>${money(R.avg30)} RSD</b>. Ovim tempom ceo mesec izlazi oko <b>${money(R.projected)} RSD</b>${b ? `, a na kraju meseca ostalo bi oko <b>${money(b.now - (R.projected - R.month))} RSD</b>` : ""}.</p>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>${icon("grafikon", 26)} Grafikoni</h2></div>
+    <div class="wallet wide" data-model="grafikon"></div>
+    <div class="periods" style="margin:18px 0 10px">${[["dani", "30 dana"], ["nedelje", "Nedelje"], ["meseci", "Meseci"]].map(([id, n]) => `<button class="chip" data-chart="${id}" aria-pressed="${mode === id}">${n}</button>`).join("")}</div>
+    ${chart}
+    <p class="note" style="margin-top:6px">${mode === "dani" ? `Isprekidana linija je prosečan dan, ${money(R.avg30)} RSD. Gotovina se računa na dan podizanja.` : mode === "nedelje" ? "Nedelja od ponedeljka. Poslednja je ova, do danas." : "Poslednji mesec je ovaj, do danas."}</p>
+    ${cc.length ? `<div class="cc">
+      <div class="sec-h" style="margin:26px 0 8px"><span class="meta">Ovaj i prošli mesec</span><span class="lg"><i class="a"></i><span class="meta dim">ovaj, do danas</span><i class="b"></i><span class="meta dim">prošli</span></span></div>
+      ${cc.map(r => `<button class="ccrow" data-cat="${r.id}"><span class="n">${catIcon(r.id, 16)}${esc(catName(r.id))}</span>
+        <span class="bars"><i class="a" style="width:${(r.now / ccMax * 100).toFixed(1)}%"></i><i class="b" style="width:${(r.before / ccMax * 100).toFixed(1)}%"></i></span>
+        <span class="v num">${money(r.now)}<span class="dim"> / ${money(r.before)}</span></span></button>`).join("")}
+    </div>` : ""}
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>${icon("upozorenje", 26)} Upozorenja</h2><span class="meta dim">${ins.length ? ins.filter(i => i.level === "warn").length + " važno" : ""}</span></div>
+    ${ins.length ? `<div class="ins">${ins.map(i => `<div class="icard ${i.level}"><span class="tic">${catIcon(i.icon, 20)}</span><div><b>${esc(i.title)}</b><p>${esc(i.text)}</p></div></div>`).join("")}</div>`
+      : `<p class="note">Za sada nema ništa neobično.</p>`}
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>${icon("nenuzno", 26)} Nije nužno</h2><span class="meta dim">Poslednjih 30 dana</span></div>
+    ${ne.sum ? `<div class="tiles">
+      <div class="tile"><span class="meta dim">Ukupno</span><span class="v num">${money(ne.sum)}</span><span class="meta dim">${ne.share}% potrošnje</span></div>
+      <div class="tile"><span class="meta dim">Godišnje, ovim tempom</span><span class="v num">${money(ne.yearly)}</span><span class="meta dim">ako se ništa ne promeni</span></div>
+    </div>
+    <div class="rows" style="margin-top:12px">${ne.rows.map(r => `<button class="crow" data-cat="${r.id}">${catIcon(r.id, 22)}<span class="name">${esc(catName(r.id))}</span><span class="amt num">${money(r.v)}</span><span class="bar"><i style="width:${(r.v / ne.rows[0].v * 100).toFixed(1)}%"></i></span><span class="meta dim">${r.id === "cigarete" && ne.packs ? `${ne.packs} ${ne.packs % 10 === 1 && ne.packs % 100 !== 11 ? "paklica" : "paklice"} sa skeniranih računa` : ""}</span></button>`).join("")}</div>`
+      : `<p class="note">Nema troškova na cigarete, alkohol, izlaske, dostavu, taksi i pretplate.</p>`}
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>${icon("navike", 26)} Navike</h2><span class="meta dim">Poslednjih 60 dana</span></div>
+    <div class="facts">
+      <div><span class="meta dim">Najviše trošiš</span><span>${esc(WD[hb.topWd])}, prosečno ${money(hb.avgWd[hb.topWd])} RSD</span></div>
+      ${hb.top ? `<div><span class="meta dim">Najčešće kupuješ</span><span>${esc(hb.top.name)}, ${puta(hb.top.n)}, ukupno ${money(hb.top.v)} RSD</span></div>` : ""}
+      <div><span class="meta dim">Kupovina</span><span>${hb.buys}, prosečno ${money(hb.avgBuy)} RSD</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>${icon("osoba", 26)} Profil</h2></div>
+    <label class="field" style="max-width:360px"><span class="meta dim">Ime</span><input id="p-name" value="${esc(pr?.merchant || "")}" placeholder="Kako da te app zove" autocomplete="given-name"></label>
+    <p class="note"><span class="meta dim">${esc(S.session?.user?.email || "")}</span></p>
+  </section>`;
+  document.getElementById("ava-file").onchange = ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f) openCropper(f); };
+  document.getElementById("p-name").onchange = ev => saveProfile({ merchant: ev.target.value.trim() });
+  const ch = document.getElementById("ch");
+  if (ch) ch.addEventListener("click", ev => { const g = ev.target.closest("[data-tip]"); if (!g) return; ch.querySelectorAll(".bar.on").forEach(x => x.classList.remove("on")); g.classList.add("on"); ch.querySelector(".tip").textContent = g.dataset.tip; });
+  startWallet();
+}
+async function saveProfile(patch) {
+  const pr = profRow();
+  if (pr) {
+    if (!await guard(() => updateReceipt(pr.id, patch), "Sačuvano")) return false;
+    Object.assign(pr, patch);
+  } else {
+    const row = { kind: "manual", cat: "profil", total: 0, issued_at: "2000-01-01T12:00:00", merchant: "", store: "", payment: "racun", refund: false, items: [], person: "", journal: null, ...patch };
+    const saved = await guard(() => insertReceipt(row), "Sačuvano");
+    if (!saved) return false;
+    S.data.receipts.push(saved);
+  }
+  render(); return true;
+}
+/* slika: biranje dela slike koji ide u krug (kao u "kako ide?") */
+async function openCropper(file) {
+  try {
+    const url = URL.createObjectURL(file);
+    const img = new Image(); img.src = url; await img.decode();
+    S.sheet = { kind: "crop", src: url, img, w: img.naturalWidth, h: img.naturalHeight, x: 0, y: 0, z: 1 };
+    drawSheet();
+  } catch (e) { toast("Slika nije otvorena. Probaj drugu."); }
+}
+function cropGeom(st, S0) {
+  const k = S0 / Math.min(st.w, st.h) * st.z;
+  const mx = Math.max(0, (st.w * k - S0) / 2), my = Math.max(0, (st.h * k - S0) / 2);
+  st.x = Math.max(-mx, Math.min(mx, st.x)); st.y = Math.max(-my, Math.min(my, st.y));
+  return { k, left: S0 / 2 - st.w * k / 2 + st.x, top: S0 / 2 - st.h * k / 2 + st.y };
+}
+function drawCrop() {
+  const st = S.sheet;
+  layer.innerHTML = `<div class="scrim" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="c-t"><div class="sheet-in">
+    <span class="meta dim">Profil</span><h3 id="c-t">Slika</h3>
+    <p class="note" style="margin:0">Prevuci sliku prstom da lice bude u krugu. Klizač je povećava.</p>
+    <div class="crop" id="crop"><img alt="" src="${esc(st.src)}" draggable="false"></div>
+    <label class="field" style="max-width:300px"><span class="meta dim">Veličina</span><input type="range" id="crop-z" min="1" max="4" step="0.01" value="${st.z}"></label>
+    <div class="row-btns"><button class="cta" data-cropsave>[ Sačuvaj ]</button><button class="btn" data-close>Otkaži</button></div>
+  </div></div>`;
+  const box = document.getElementById("crop"), img = box.querySelector("img"), zr = document.getElementById("crop-z");
+  const place = () => { const g = cropGeom(st, box.clientWidth); img.style.width = st.w * g.k + "px"; img.style.height = st.h * g.k + "px"; img.style.transform = `translate(${g.left}px, ${g.top}px)`; };
+  place();
+  let drag = null;
+  box.onpointerdown = ev => { box.setPointerCapture(ev.pointerId); drag = { x: ev.clientX, y: ev.clientY, sx: st.x, sy: st.y }; };
+  box.onpointermove = ev => { if (!drag) return; st.x = drag.sx + ev.clientX - drag.x; st.y = drag.sy + ev.clientY - drag.y; place(); };
+  box.onpointerup = box.onpointercancel = () => { drag = null; };
+  zr.oninput = () => { const S0 = box.clientWidth, old = cropGeom(st, S0).k; st.z = +zr.value; const nk = cropGeom(st, S0).k; st.x *= nk / old; st.y *= nk / old; place(); };
+  st.size = () => box.clientWidth;
+}
+async function saveCrop() {
+  const st = S.sheet, S0 = st.size(), OUT = 384, g = cropGeom(st, S0), f = OUT / S0;
+  const c = document.createElement("canvas"); c.width = c.height = OUT;
+  c.getContext("2d").drawImage(st.img, g.left * f, g.top * f, st.w * g.k * f, st.h * g.k * f);
+  const data = c.toDataURL("image/jpeg", 0.86);
+  URL.revokeObjectURL(st.src);
+  S.sheet = null; drawSheet();
+  await saveProfile({ journal: data });
+}
+
 /* ---------- koliko imaš ---------- */
 const bal = () => balance(S.data.receipts, list());
 function haveLine() {
@@ -465,6 +647,7 @@ function drawSheet() {
   if (st.kind === "ocrwait") return drawOcrWait();
   if (st.kind === "ocr") return drawOcr();
   if (st.kind === "have") return drawHave();
+  if (st.kind === "crop") return drawCrop();
   const e = st.e, rc = e.receipt, isPass = st.cat === "prolazno", isRec = e.type === "receipt";
   layer.innerHTML = `<div class="scrim" data-close></div>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t"><div class="sheet-in">
@@ -851,6 +1034,7 @@ app.addEventListener("click", async ev => {
   if (t.closest("[data-scan]")) { openScan(); return; }
   if (t.closest("[data-have]")) { openHave(); return; }
   if (t.closest("[data-income]")) { openManual(true); return; }
+  const chm = t.closest("[data-chart]"); if (chm) { S.chart = chm.dataset.chart; const y = window.scrollY; render(); window.scrollTo(0, y); return; }
   const th = t.closest("[data-theme-set]"); if (th) { setTheme(th.dataset.themeSet); render(); return; }
   if (t.closest("[data-dismiss-install]")) { try { localStorage.setItem("kp-install", "1"); } catch (_) {} render(); return; }
   const dr = t.closest("[data-delrule]");
@@ -898,6 +1082,7 @@ layer.addEventListener("click", ev => {
   }
   if (t.closest("[data-omanual]")) { openManual(); return; }
   if (t.closest("[data-hsave]")) { saveHave(); return; }
+  if (t.closest("[data-cropsave]")) { saveCrop(); return; }
   if (t.closest("[data-hedit]")) { st.edit = true; st.amt = bal() ? String(bal().now) : ""; st.date = today(); drawSheet(); return; }
   if (t.closest("[data-hcancel]")) { st.edit = false; drawSheet(); return; }
   if (t.closest("[data-income]")) { openManual(true); return; }

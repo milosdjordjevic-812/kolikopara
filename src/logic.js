@@ -23,6 +23,8 @@ export const CATS = [
   { id: "priliv",       name: "Priliv",              kind: "income" },
   { id: "prolazno",     name: "Prolazno",            kind: "pass" },
 ];
+// zapisi u tabeli računa koji nisu stavke: stanje (koliko imaš na neki dan) i profil (ime i slika)
+export const META_CATS = new Set(["stanje", "profil"]);
 export const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 export const catName = id => (CAT[id] || CAT.nerazvrstano).name;
 
@@ -119,7 +121,7 @@ export function derive(state) {
 
   // 3. uparivanje računa i uplatnica koji nisu plaćeni gotovinom sa stavkom iz banke
   // "stanje" je zapis koliko imaš na neki dan, nije stavka
-  const recs = receipts.filter(r => r.cat !== "stanje").sort((a, b) => (a.issued_at < b.issued_at ? -1 : 1));
+  const recs = receipts.filter(r => !META_CATS.has(r.cat)).sort((a, b) => (a.issued_at < b.issued_at ? -1 : 1));
   const taken = new Set();
   for (const rc of recs) {
     if (rc.payment === "gotovina") continue;

@@ -11,6 +11,7 @@ const loadModel = url => (cache[url] ||= new GLTFLoader().loadAsync(url));
 
 export const mountWallet = (el, o = {}) => mountModel(el, { url: "/models/novcanik.glb", ...o });
 export const mountCard = (el, o = {}) => mountModel(el, { url: "/models/kartica.glb", period: 22, ...o });
+export const mountNamed = (el, name, o = {}) => mountModel(el, { url: `/models/${name}.glb`, period: 24, ...o });
 
 // still: ugao u radijanima za mirnu sliku bez okretanja (koristi se i za ikonicu appa)
 export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width = 1.15, period = 18, still = null, zoom = 0.9, mask = false } = {}) {
