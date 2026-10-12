@@ -42,3 +42,17 @@ t("račun gotovinom smanjuje neobjašnjenu gotovinu, ukupno isto", () => {
   assert.equal(T.unexplained, 241400);
   assert.equal(T.spend, 456919.51);
 });
+
+test("koliko imaš: stanje + uplata - potrošnja, uplata se ne broji dvaput kad stigne izvod", async () => {
+  const { derive, balance } = await import("../src/logic.js");
+  const stanje = { id: "s", kind: "manual", cat: "stanje", total: 85000, issued_at: "2026-10-12T12:00:00", created_at: "2026-10-12T09:00:00Z", payment: "racun", items: [] };
+  const uplata = { id: "u", kind: "manual", cat: "priliv", refund: true, merchant: "Hristijan", total: 100000, issued_at: "2026-10-12T12:00:00", created_at: "2026-10-12T09:05:00Z", payment: "racun", items: [] };
+  const trosak = { id: "t", kind: "manual", cat: "market", total: 1500, issued_at: "2026-10-13T12:00:00", created_at: "2026-10-13T09:00:00Z", payment: "gotovina", items: [] };
+  let st = { tx: [], receipts: [stanje, uplata, trosak] };
+  assert.equal(balance(st.receipts, derive(st)).now, 183500);
+  // izvod stigne dva dana kasnije, sa istom uplatom: i dalje 183.500
+  st = { tx: [{ id: "b1", d: "2026-10-14", t: "UPLATA HRISTIJAN AKKA STUDIO", a: 100000 }], receipts: [stanje, uplata, trosak] };
+  const L = derive(st);
+  assert.equal(L.filter(e => e.amount > 0).length, 1);
+  assert.equal(balance(st.receipts, L).now, 183500);
+});
