@@ -13,7 +13,8 @@ test("artikal ide u svoju grupu, ne u grupu radnje", () => {
   assert.equal(itemGroup("MILKA COKOLADA 100G").id, "slatkisi");
   assert.equal(itemGroup("BANANE /KG").id, "voce");
   assert.equal(itemGroup("EVRO DIZEL").id, "gorivo");
-  assert.equal(itemGroup("SRAF M6 INOX").id, "ostalo");
+  assert.equal(itemGroup("SRAF M6 INOX").id, "kucaauto");
+  assert.equal(itemGroup("ROTOR 3000").id, "ostalo");
 });
 
 test("cigarete iz Maxija i Univerexporta se sabiraju zajedno", () => {
@@ -58,4 +59,20 @@ test("amountText: jedna paklica, pet paklica, 21 paklica, litri goriva", () => {
   assert.equal(amountText({ ...c, pieces: 5, weight: 0 }), "5 paklica");
   assert.equal(amountText({ ...c, pieces: 21, weight: 0 }), "21 paklica");
   assert.equal(amountText({ id: "gorivo", unit: ["litar", "litra", "litara"], pieces: 0, weight: 31.5 }), "31,5 litara");
+});
+
+test("uradi sam: materijal za kuću i auto, šifra artikla se skida, prodajno mesto kao šifra", () => {
+  const items = ["426742 BATERIJA ZA SUDOPERU DOMI", "405020 CISTAC STAKLA 60cm", "425313 BRISAC STAKLA 20CM AB3260", "429534 KUKICE METALNE 3M CRNE T", "404691 RUKAVICE ZA DOMACINSTVO D", "DRZAC ZA TOALET PAPIR"];
+  for (const n of items) assert.equal(itemGroup(n).id, "kucaauto", n);
+  assert.equal(itemGroup("ROTOR 3000", [], "kucaauto").id, "kucaauto");
+  const bk = basket([{ d: "2026-10-12", name: "P200", cat: "kucaauto", receipt: { store: "P200", merchant: "URADI SAM DOO", items: [{ name: "426742 BATERIJA ZA SUDOPERU DOMI", qty: 1, total: 5299 }, { name: "ROTOR 3000", qty: 1, total: 100 }] } }]);
+  assert.equal(bk.length, 1);
+  assert.equal(bk[0].id, "kucaauto");
+  assert.equal(bk[0].items[0].name, "BATERIJA ZA SUDOPERU DOMI");
+  assert.deepEqual(bk[0].items[0].stores, ["URADI SAM DOO"]);
+});
+
+test("pravilo za artikal određuje grupu", () => {
+  const rules = [{ kind: "item", match: "ROTOR", cat: "kucaauto" }];
+  assert.equal(itemGroup("ROTOR 3000", rules).id, "kucaauto");
 });

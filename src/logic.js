@@ -3,6 +3,7 @@ import { latin } from "./shared/fiscal.js";
 
 export const CATS = [
   { id: "market",       name: "Market i namirnice",  kind: "spend" },
+  { id: "pijaca",       name: "Pijaca",              kind: "spend" },
   { id: "dostava",      name: "Dostava hrane",       kind: "spend" },
   { id: "izlasci",      name: "Kafići i izlasci",    kind: "spend" },
   { id: "cigarete",     name: "Cigarete",            kind: "spend" },
@@ -38,6 +39,7 @@ const MERCHANT = [
   ["pretplate", /ADOBE|APPLE\.COM|OPENAI|MIDJOURNEY|GOOGLE|FORMIA|SPOTIFY|NETFLIX|FIGMA|NOTION|DROPBOX/],
   ["racuni",    /YETTEL|A1 SRBIJA|TELEKOM|\bMTS\b|\bSBB\b|\bEPS\b|ELEKTROPRIVREDA|INFOSTAN|BEOGRADSKE ELEKTRANE|VODOVOD/],
   ["market",    /UNIVEREXPORT|MAXI|C MARKET|LIDL|SVEZE VOCE|SVEŽE VOĆE|THE PIJAC|AMAN DOO|\bIDEA\b|TEMPO|RODA|PERSPEKTIVA|DELHAIZE|MERCATOR/],
+  ["pijaca",    /\bPIJAC[AEIU]?\b|ZELENI VENAC|KALENI[ĆC]|BAJLONI|PILJAR/],
   ["izlasci",   /ZABAC|ŽABAC|BAR ZA|PIZZ|KAFE|CAFFE|KESTEN|ARGUMENT|HVALA TIP|RESTORAN/],
   ["kucaauto",  /BAUHAUS|MERKUR|MR ?BRICOLAGE|PEVEX|URADI SAM|\bOBI\b|JYSK|AUTO ?DELOVI|AUTODELOVI|AUTO ?CENTAR|VULKANIZ|AUTO ?SERVIS|TEHNI[CČ]KI PREGLED|AUTO ?PERIONICA|PERIONICA|GVO[ŽZ][ĐD]AR|BOJE I LAKOVI|ELEKTRO ?MATERIJAL/],
   ["pumpa",     /MOL SERBIA|\bMOL\b|\bOMV\b|LUKOIL|EKO SERBIA|GASPETROL|\bNIS (A\.?D|PETROL|GAZPROM)|GAZPROM|PETROL/],
@@ -49,11 +51,14 @@ const MERCHANT = [
 const ITEM = [
   ["cigarete", /MARLBORO|ROTHMANS|WINSTON|\bLD\b|CAMEL|PALL MALL|DAVIDOFF|CHESTERFIELD|PARLIAMENT|\bVOGUE\b|\bKENT\b|DUNHILL|LUCKY STRIKE|\bWEST\b|MORAVA|\bDRINA\b|CIGARE|IQOS|HEETS|TEREA|\bGLO\b|NEO STIK|DUVAN|TOBACCO|ELF ?BAR|VAPE|E-CIG|FILTER CIG|RIZLE/],
   ["gorivo",   /\bBMB\b|EVRO ?DIZEL|EURO ?DIESEL|\bDIZEL\b|DIESEL|G-DRIVE|BENZIN|\bTNG\b|AUTOGAS|AUTO GAS|\bLPG\b|MAXX ?MOTION|ADBLUE|EN ?590|\bEVRO ?PREMIUM\b/],
+  ["kucaauto", /DR[ŽZ]A[ČC] ZA|[ŠS]RAF|\bTIPL|EKSER|SIJALIC|SILIKON|BATERIJA ZA (SUDOP|TU[ŠS]|LAVAB|KAD)|SLAVIN|BRISA[ČC] STAKLA|ANTIFRIZ|MOTORNO ULJE|TE[ČC]NOST ZA BRISA/],
   ["hemija",   /DETERD[ŽZ]|\bDET\.|\bARIEL\b|PERSIL|\bBONUX\b|OMEKSIVA[CČ]|\bLENOR\b|\bDUEL\b|\bFAIRY\b|PRONTO|DOMESTOS|\bSAVO\b|\bARF\b|\bCIF\b|\bBREF\b|TOALET|\bWC\b|UBRUS|MARAMIC|MARAMIČ|SUN[ĐD]ER|SUNDJER|\bKRPA|VLA[ŽZ]\.? ?MAR|SAPUN|[ŠS]AMPON|GEL ZA TU[ŠS]|PASTA ZA ZUBE|COLGATE|[ČC]ETKICA|DEZODOR|\bDEO\b|NIVEA|BRIJA[ČC]|GILLETTE|PELENE|ULO[ŠS]CI|ULO[ŠS]AK|TAMPON|\bVATA\b|KESE ZA SME|SREDSTVO ZA/],
   ["alkohol",  /\bPIVO\b|\bBEER\b|\bVINO\b|\bWINE\b|RAKIJA|VOTKA|VODKA|VISKI|WHISK|JAGERMEISTER|J[ÄA]GER|\bGIN\b|\bRUM\b|\bJELEN\b|ZAJE[ČC]ARSKO|HEINEKEN|TUBORG|CARLSBERG|STELLA ARTOIS|NIKSI[ČC]KO|\bLAV PIVO/],
 ];
 
 export const upper = s => latin(s).toUpperCase();
+// prodajno mesto je ponekad samo šifra ("P200"), tada je ime firme korisnije
+export const storeName = rc => { const st = String(rc.store || "").trim(); return st && !/^[A-Z]{0,3}[-\s]?\d{1,6}$/i.test(st) ? st : (rc.merchant || st); };
 const r2 = n => Math.round(n * 100) / 100;
 
 export function merchantKey(desc) {
@@ -155,7 +160,7 @@ export function derive(state) {
     const d = String(rc.issued_at).slice(0, 10);
     const sign = rc.refund ? 1 : -1;
     const amount = sign * Math.abs(rc.total);
-    const title = rc.kind === "ips" ? (rc.merchant || "Uplatnica") : rc.kind === "manual" ? (rc.merchant || "Ručni unos") : (rc.store || rc.merchant || "Račun");
+    const title = rc.kind === "ips" ? (rc.merchant || "Uplatnica") : rc.kind === "manual" ? (rc.merchant || "Ručni unos") : (storeName(rc) || "Račun");
     const base = rc.cat || receiptBaseCat(rules, rc);
     const e = {
       type: "receipt", id: "r:" + rc.id, d, t: title, name: upper(title), amount, receipt: rc,
@@ -192,6 +197,10 @@ function bankParts(e, rules) {
   }
   if (e.receipt && e.receipt.kind === "fiscal" && (e.receipt.items || []).length) {
     return itemParts(rules, e.receipt.items, e.amount, e.cat, e.amount < 0 ? -1 : 1);
+  }
+  // ručni unos sa artiklima (npr. pijaca) uparen sa karticom
+  if (e.receipt && e.receipt.kind === "manual" && (e.receipt.items || []).length && !e.ov) {
+    return itemParts(rules, e.receipt.items, e.amount, e.receipt.cat || e.cat, e.amount < 0 ? -1 : 1);
   }
   if (e.receipt && e.receipt.cat && !e.ov) return [{ cat: e.receipt.cat, amount: e.amount, person: e.receipt.person || "" }];
   return [{ cat: e.cat, amount: e.amount, person: e.person }];

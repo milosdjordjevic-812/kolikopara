@@ -1,7 +1,7 @@
 // Korpa: šta je kupljeno, po vrstama artikala, sa svih računa. Bez DOM-a, da može da se testira.
 // Vrsta artikla je odvojena od kategorije troška: voda kupljena na pumpi je i dalje "voda i sokovi",
 // a trošak ostaje "na pumpi". Cigarete, alkohol, gorivo i hemija menjaju i kategoriju (vidi ITEM u logic.js).
-import { upper } from "./logic.js";
+import { upper, itemCat, storeName } from "./logic.js";
 
 // redosled je važan: prvo ono što bi se pomešalo (tečni sapun "med mleko" je hemija, ne mleko)
 export const GROUPS = [
@@ -9,6 +9,8 @@ export const GROUPS = [
     re: /MARLBORO|ROTHMANS|WINSTON|\bLD\b|CAMEL|PALL MALL|DAVIDOFF|CHESTERFIELD|PARLIAMENT|\bVOGUE\b|\bKENT\b|DUNHILL|LUCKY STRIKE|\bWEST\b|MORAVA|\bDRINA\b|CIGARE|IQOS|HEETS|TEREA|NEO STIK|DUVAN|TOBACCO|RIZLE/ },
   { id: "gorivo", name: "Gorivo", icon: "gorivo", unit: ["litar", "litra", "litara"], weight: "l",
     re: /\bBMB\b|EVRO ?DIZEL|EURO ?DIESEL|\bDIZEL\b|DIESEL|G-DRIVE|BENZIN|\bTNG\b|AUTOGAS|AUTO GAS|\bLPG\b|MAXX ?MOTION|EVRO ?PREMIUM/ },
+  { id: "kucaauto", name: "Kuća i auto, materijal", icon: "kucaauto",
+    re: /DR[ŽZ]A[ČC]|NOSA[ČC]|KUKIC|\bKUKA\b|[ŠS]RAF|\bTIPL|EKSER|VIJAK|SIJALIC|LED ?SIJ|SILIKON|BATERIJA ZA (SUDOP|TU[ŠS]|LAVAB|KAD)|SLAVIN|SIFON|BRISA[ČC]|METLIC[EA] BRIS|[ČC]ISTA[ČC] STAKLA \d|RUKAVICE|PRODU[ŽZ]N|\bKABL|UTI[ČC]NIC|PREKIDA[ČC]|LEPAK|LEPLJIV|IZOLIR|\bTRAKA\b|FARBA|BOJA ZA (ZID|DRVO|METAL)|VALJAK|[ČC]ETKA ZA|[ŠS]MIRGL|ODVIJA[ČC]|KLE[ŠS]TA|[ČC]EKI[ĆC]|BURGIJ|MERDEVIN|OTIRA[ČC]|\bKANTA|\bCREVO|ANTIFRIZ|MOTORNO ULJE|ULJE ZA MOTOR|TE[ČC]NOST ZA (STAKLA|BRISA)|OSIGURA[ČC]|\bALAT|KATANAC|\bBRAVA|CILINDAR|ZAPTIV|ŠARKA|SARKA/ },
   { id: "hemija", name: "Deterdžent i kućna hemija", icon: "hemija",
     re: /DETERD[ŽZ]|\bDET\.|\bARIEL\b|PERSIL|\bBONUX\b|OMEKSIVA[CČ]|\bLENOR\b|\bDUEL\b|\bFAIRY\b|PRONTO|DOMESTOS|\bSAVO\b|\bARF\b|\bCIF\b|\bBREF\b|TOALET|\bWC\b|UBRUS|SUN[ĐD]ER|SUNDJER|\bKRPA|KESE ZA SME|SREDSTVO ZA/ },
   { id: "higijena", name: "Higijena i kozmetika", icon: "apoteka",
@@ -34,27 +36,34 @@ export const GROUPS = [
 export const GROUP = Object.fromEntries(GROUPS.map(g => [g.id, g]));
 const OTHER = { id: "ostalo", name: "Ostalo sa računa", icon: "ostalo" };
 
-export function itemGroup(name) {
+// korisnikovo pravilo za artikal ima prednost, pa reči iz naziva; artikal koji se ne prepozna
+// a kupljen je u radnji za kuću i auto ide u tu grupu
+const BY_CAT = { cigarete: "cigarete", alkohol: "alkohol", gorivo: "gorivo", hemija: "hemija", kucaauto: "kucaauto" };
+export function itemGroup(name, rules = [], baseCat = "") {
   const u = upper(name);
-  return GROUPS.find(g => g.re.test(u)) || OTHER;
+  const r = rules.length ? itemCat(rules, name) : null;
+  if (r && r.rule && BY_CAT[r.cat]) return GROUP[BY_CAT[r.cat]];
+  return GROUPS.find(g => g.re.test(u)) || (baseCat === "kucaauto" ? GROUP.kucaauto : OTHER);
 }
 
 // artikal na meru (kg ili litar) ili na komad
 const isWeight = (name, g) => g.weight === "l" || /\/\s*KG\b|\bKG\b|\/\s*L\b/.test(upper(name));
-const short = name => String(name).replace(/\s*\/\s*(KOM|KG|L|KOMAD)\s*$/i, "").replace(/\s+/g, " ").trim();
+// bez šifre artikla na početku ("426742 BATERIJA ZA SUDOPERU") i bez jedinice na kraju
+const short = name => String(name).replace(/^\s*\d{4,8}\s+(?=\D)/, "").replace(/\s*\/\s*(KOM|KG|L|KOMAD)\s*$/i, "").replace(/\s+/g, " ").trim();
 
 /*
  * Svi artikli iz liste stavki (izvedene stavke sa računima). Vraća grupe sa zbirom komada, kilograma
  * i dinara, i artikle u svakoj grupi spojene po imenu.
  */
-export function basket(list) {
+export function basket(list, rules = []) {
   const groups = {};
   for (const e of list) {
     const rc = e.receipt; if (!rc || !(rc.items || []).length) continue;
-    const store = rc.store || rc.merchant || e.name;
+    const store = storeName(rc) || e.name;
+    const base = rc.cat || e.cat || "";
     for (const it of rc.items) {
       const total = Math.abs(it.total || 0); if (!total) continue;
-      const g = itemGroup(it.name), w = isWeight(it.name, g), qty = Math.abs(it.qty || 1);
+      const g = itemGroup(it.name, rules, base), w = isWeight(it.name, g), qty = Math.abs(it.qty || 1);
       const G = (groups[g.id] ||= { ...g, items: {}, pieces: 0, weight: 0, sum: 0, buys: 0 });
       const key = upper(short(it.name));
       const I = (G.items[key] ||= { name: short(it.name), pieces: 0, weight: 0, sum: 0, stores: new Set(), last: "", w });

@@ -7,6 +7,7 @@ import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
 import { shouldPlayIntro, playIntro } from "./intro.js";
 import { basket, amountText } from "./items.js";
+import { parseSpoken, guessCat } from "./spoken.js";
 import { rhythm, seriesDays, seriesWeeks, seriesMonths, categoryCompare, insights, nonEssential, habits } from "./stats.js";
 
 /* ---------- pomoćne ---------- */
@@ -491,7 +492,7 @@ function renderProfile() {
       : `<p class="note">Nema troškova na cigarete, alkohol, izlaske, dostavu, taksi i pretplate.</p>`}
   </section>
 
-  ${(() => { const bk = basket(L.filter(e => e.d >= dstrBack(td, 29))).filter(g => g.id !== "ostalo").slice(0, 6); return `<section>
+  ${(() => { const bk = basket(L.filter(e => e.d >= dstrBack(td, 29)), S.data.rules).filter(g => g.id !== "ostalo").slice(0, 6); return `<section>
     <div class="sec-h"><h2>${icon("korpa", 26)} Šta kupuješ</h2><span class="meta dim">Poslednjih 30 dana, sa računa</span></div>
     ${bk.length ? `<div class="facts">${bk.map(g => `<div><span class="meta dim">${esc(g.name)}</span><span>${esc(amountText(g))}, ${money(g.sum)} RSD</span></div>`).join("")}</div>` : `<p class="note">Kad skeniraš račune, ovde piše koliko čega kupuješ.</p>`}
     <div class="row-btns" style="margin-top:14px"><button class="cta" data-go="korpa">[ Cela korpa ]</button></div>
@@ -581,7 +582,7 @@ function renderBasket() {
   const td = today(), per = S.kper || "mesec", ym = td.slice(0, 7);
   const pm = (() => { const [y, m] = ym.split("-").map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`; })();
   const pick = { mesec: e => e.d.startsWith(ym), prosli: e => e.d.startsWith(pm), "30": e => e.d >= dstrBack(td, 29), sve: () => true }[per];
-  const all = list(), L = all.filter(pick), bk = basket(L);
+  const all = list(), L = all.filter(pick), bk = basket(L, S.data.rules);
   const scanned = L.filter(e => e.receipt && (e.receipt.items || []).length).length;
   const max = Math.max(1, ...bk.map(g => g.sum));
   app.innerHTML = `${header()}
@@ -798,7 +799,7 @@ function openScan() {
     <button class="cta shutter" data-shoot>[ Slikaj ]</button><input type="file" id="cam-text" accept="image/*" capture="environment" hidden><div class="flash"></div></div>
   <div class="bottom">
     <div class="modes"><button class="mode" data-mode="qr" aria-pressed="true">Skeniraj QR</button><button class="mode" data-mode="text" aria-pressed="false">Slikaj tekst računa</button></div>
-    <button class="btn" data-manual>Unesi ručno</button>
+    <button class="btn" data-manual>Unesi ručno</button><button class="btn" data-voice>${icon("mikrofon", 16)} Izgovori</button>
   </div>`;
   document.body.appendChild(cam);
   const hint = cam.querySelector("#cam-hint");
@@ -808,6 +809,7 @@ function openScan() {
   cam.addEventListener("click", ev => {
     if (ev.target.closest("[data-camclose]")) closeCam();
     if (ev.target.closest("[data-manual]")) { closeCam(); openManual(); }
+    if (ev.target.closest("[data-voice]")) { closeCam(); openManual(false, true); }
     if (ev.target.closest("[data-shoot]")) {
       // slika se pravi iz kamere u appu; ako kamera ne radi, otvara se kamera telefona
       const v = cam.querySelector("video"), p = cam.dataset.nocam ? null : grabFrame(v, cam.querySelector(".frame"));
@@ -1017,18 +1019,37 @@ async function saveOcr() {
   afterSaved(saved);
 }
 
-function openManual(income = false) { S.sheet = { kind: "manual", income, cat: "nerazvrstano", payment: income ? "racun" : "gotovina", desc: "", amount: "", date: today(), person: "" }; drawSheet(); }
+function openManual(income = false, listen = false) {
+  S.sheet = { kind: "manual", income, cat: "nerazvrstano", payment: income ? "racun" : "gotovina", desc: "", amount: "", date: today(), person: "", items: [], said: "", sayNote: "" };
+  drawSheet(); if (listen) toggleVoice();
+}
 const incomeNames = () => [...new Set(S.data.receipts.filter(r => r.cat === "priliv" && r.merchant).map(r => r.merchant))].sort();
 function drawManual() {
-  const st = S.sheet;
+  const st = S.sheet, its = st.items || [];
+  const isum = its.reduce((a, it) => a + (Math.abs(parseAmt(it.total)) || 0), 0);
   layer.innerHTML = `<div class="scrim" data-close></div>
   <div class="sheet" role="dialog" aria-modal="true"><div class="sheet-in">
     <div class="catgrid"><button class="chip" data-mmode="out" aria-pressed="${!st.income}">Trošak</button><button class="chip" data-mmode="in" aria-pressed="${!!st.income}">Uplata</button></div>
+    <div class="say${st.listening ? " on" : ""}">
+      <button class="saybtn" data-mvoice aria-label="${st.listening ? "Završi" : "Izgovori"}">${icon("mikrofon", 22)}<span>${st.listening ? "Slušam, dodirni kad završiš" : "Izgovori"}</span></button>
+      <input id="m-say" value="${esc(st.said || "")}" placeholder="${st.income ? "npr. Akka studio uplata 100000" : "npr. pijaca, paradajz 230, krastavac 120"}" enterkeyhint="done" autocomplete="off" aria-label="Unos rečenicom">
+      ${st.sayNote ? `<p class="note">${esc(st.sayNote)}</p>` : ""}
+    </div>
     ${st.income ? drawIncomeFields(st) : `<h3>Trošak bez računa</h3>
     <div class="map">
-      <label class="field"><span class="meta">Na šta</span><input id="m-desc" value="${esc(st.desc)}" placeholder="npr. pijaca, frizer"></label>
-      <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="0"></label>
+      <label class="field"><span class="meta">Na šta ili gde</span><input id="m-desc" value="${esc(st.desc)}" placeholder="npr. pijaca, frizer"></label>
+      <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="${isum ? amtStr(isum) : "0"}"></label>
       <label class="field"><span class="meta">Datum</span><input id="m-date" type="date" value="${esc(st.date)}"></label>
+    </div>
+    <div class="field"><span class="meta">Artikli, da ih Korpa broji (nije obavezno)</span>
+      ${its.length ? `<div class="oitems">${its.map((it, i) => `<div class="orow">
+        <textarea data-mname="${i}" rows="1" aria-label="Naziv artikla" placeholder="npr. paradajz">${esc(it.name)}</textarea>
+        <input data-mamt="${i}" inputmode="decimal" value="${esc(it.total)}" aria-label="Iznos" placeholder="0">
+        <button class="x" data-mdel="${i}" aria-label="Ukloni artikal">×</button>
+        ${it.qty && it.qty !== 1 ? `<span class="q meta dim">${String(it.qty).replace(".", ",")} ${/\/KG$/.test(it.name) ? "kg" : "kom"}</span>` : ""}
+      </div>`).join("")}</div>` : ""}
+      <button class="btn" data-madd style="align-self:flex-start">+ Artikal</button>
+      ${its.length ? `<span class="meta dim">Zbir artikala ${money(isum, true)}${st.amount && Math.abs(Math.abs(parseAmt(st.amount)) - isum) > 0.01 ? ", razlika ide u kategoriju ispod" : ""}</span>` : ""}
     </div>
     <div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["gotovina", "kartica", "racun"].map(p => `<button class="chip" data-mpay="${p}" aria-pressed="${st.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>
     <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina" || c.id === "prolazno").map(c => `<button class="chip" data-mcat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
@@ -1051,16 +1072,75 @@ function readManual() {
   const st = S.sheet;
   const g = id => document.getElementById(id);
   if (g("m-desc")) st.desc = g("m-desc").value; if (g("m-amt")) st.amount = g("m-amt").value; if (g("m-date")) st.date = g("m-date").value; if (g("m-person")) st.person = g("m-person").value.trim();
+  if (g("m-say")) st.said = g("m-say").value;
+  layer.querySelectorAll("[data-mname]").forEach(el => { const it = st.items[+el.dataset.mname]; if (it) it.name = el.value.trim(); });
+  layer.querySelectorAll("[data-mamt]").forEach(el => { const it = st.items[+el.dataset.mamt]; if (it) it.total = el.value.trim(); });
 }
+const redrawKeep = () => { const sh = layer.querySelector(".sheet"), y = sh ? sh.scrollTop : 0; drawSheet(); const n = layer.querySelector(".sheet"); if (n) n.scrollTop = y; };
+
+// rečenica (izgovorena ili napisana) popunjava polja; korisnik proveri pa sačuva
+function applySaid(text) {
+  const st = S.sheet; if (!st || st.kind !== "manual") return;
+  const r = parseSpoken(text, { incomeNames: incomeNames(), rules: S.data.rules });
+  st.said = text;
+  if (!r.desc && r.amount == null) { st.sayNote = "Nisam razumeo. Probaj ovako: pijaca, paradajz 230, krastavac 120."; return; }
+  st.income = r.income;
+  if (r.desc) st.desc = r.desc;
+  st.amount = r.amount != null ? amtStr(r.amount) : "";
+  st.payment = r.payment || (r.income ? "racun" : st.payment === "racun" && !r.income ? "gotovina" : st.payment);
+  st.date = r.dayOffset ? dstrBack(today(), -r.dayOffset) : today();
+  if (!r.income) { st.items = r.items.map(i => ({ name: i.name, total: amtStr(i.total), qty: i.qty })); if (r.cat) st.cat = r.cat; }
+  st.sayNote = r.income ? "Proveri ime i iznos, pa sačuvaj." : r.items.length ? `Upisano ${stavki(r.items.length)}. Proveri pa sačuvaj.` : "Proveri pa sačuvaj.";
+}
+
+let rec = null;
+function toggleVoice() {
+  const st = S.sheet; if (!st) return;
+  if (rec) { try { rec.stop(); } catch (_) {} return; }
+  readManual();
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    st.sayNote = "Telefon ne daje appu mikrofon direktno. Dodirni polje iznad, pa mikrofon na tastaturi, izgovori i dodirni Gotovo.";
+    drawSheet(); document.getElementById("m-say")?.focus(); return;
+  }
+  const start = lang => {
+    const r = new SR(); rec = r;
+    r.lang = lang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+    let heard = "", err = "";
+    r.onresult = ev => { heard = [...ev.results].map(x => x[0].transcript).join(" ").trim(); const inp = document.getElementById("m-say"); if (inp) inp.value = heard; };
+    r.onerror = ev => {
+      if (ev.error === "language-not-supported" && lang !== "hr-HR") { rec = null; start("hr-HR"); return; }
+      err = ev.error === "not-allowed" || ev.error === "service-not-allowed" ? "Mikrofon nije dozvoljen. Dozvoli ga u podešavanjima ili dodirni polje iznad i koristi mikrofon na tastaturi."
+        : ev.error === "no-speech" ? "Nisam ništa čuo. Dodirni Izgovori i probaj ponovo." : "Mikrofon nije uspeo. Dodirni polje iznad i koristi mikrofon na tastaturi.";
+    };
+    r.onend = () => {
+      if (rec !== r) return;
+      rec = null; if (S.sheet !== st) return;
+      st.listening = false;
+      if (heard) applySaid(heard); else if (err) st.sayNote = err;
+      redrawKeep();
+    };
+    try { r.start(); st.listening = true; st.sayNote = ""; } catch (_) { rec = null; st.listening = false; st.sayNote = "Mikrofon nije uspeo. Dodirni polje iznad i koristi mikrofon na tastaturi."; }
+  };
+  start("sr-RS");
+  redrawKeep();
+}
+
 async function saveManual() {
   readManual();
-  const st = S.sheet, amt = Math.abs(parseAmt(st.amount));
+  const st = S.sheet;
+  const items = st.income ? [] : (st.items || []).map(it => ({ name: String(it.name || "").trim(), qty: it.qty || 1, total: Math.abs(parseAmt(it.total)) }))
+    .filter(it => it.name && isFinite(it.total) && it.total > 0).map(it => ({ ...it, price: Math.round(it.total / it.qty * 100) / 100 }));
+  let amt = Math.abs(parseAmt(st.amount));
+  if ((!isFinite(amt) || amt <= 0) && items.length) amt = Math.round(items.reduce((a, it) => a + it.total, 0) * 100) / 100;
   if (!isFinite(amt) || amt <= 0) { toast("Upiši iznos"); return; }
   if (!st.desc.trim()) { toast(st.income ? "Upiši od koga je uplata" : "Upiši na šta je potrošeno"); return; }
   if (st.cat === "prolazno" && !st.person) { toast("Upiši za koga je ovaj novac"); return; }
+  let cat = st.cat;
+  if (!st.income && cat === "nerazvrstano") cat = guessCat({ income: false, desc: st.desc.trim(), items }, S.data.rules) || cat;
   const row = st.income
     ? { kind: "manual", issued_at: (st.date || today()) + "T12:00:00", merchant: st.desc.trim(), store: "", total: amt, payment: st.payment, refund: true, items: [], cat: "priliv", person: "" }
-    : { kind: "manual", issued_at: (st.date || today()) + "T12:00:00", merchant: st.desc.trim(), store: "", total: amt, payment: st.payment, refund: false, items: [], cat: st.cat, person: st.cat === "prolazno" ? st.person : "" };
+    : { kind: "manual", issued_at: (st.date || today()) + "T12:00:00", merchant: st.desc.trim(), store: "", total: amt, payment: st.payment, refund: false, items, cat, person: cat === "prolazno" ? st.person : "" };
   const saved = await guard(() => insertReceipt(row), st.income ? "Uplata sačuvana" : "Sačuvano");
   if (!saved) return;
   S.data.receipts.push(saved); S.sheet = null; drawSheet(); changed();
@@ -1114,6 +1194,11 @@ layer.addEventListener("click", ev => {
   const mp = t.closest("[data-mpay]"); if (mp) { readManual(); st.payment = mp.dataset.mpay; drawSheet(); return; }
   const mc = t.closest("[data-mcat]"); if (mc) { readManual(); st.cat = mc.dataset.mcat; drawSheet(); return; }
   if (t.closest("[data-msave]")) { saveManual(); return; }
+  if (st.kind === "manual") {
+    if (t.closest("[data-mvoice]")) { toggleVoice(); return; }
+    if (t.closest("[data-madd]")) { readManual(); st.items.push({ name: "", total: "", qty: 1 }); redrawKeep(); const ins = layer.querySelectorAll("[data-mname]"); if (ins.length) ins[ins.length - 1].focus(); return; }
+    const md = t.closest("[data-mdel]"); if (md) { readManual(); st.items.splice(+md.dataset.mdel, 1); redrawKeep(); return; }
+  }
   if (st.kind === "ocr") {
     const op = t.closest("[data-opay]"); if (op) { readOcr(); st.rc.payment = op.dataset.opay; drawSheet(); return; }
     const oc = t.closest("[data-ocat]"); if (oc) { readOcr(); st.rc.cat = oc.dataset.ocat; drawSheet(); return; }
@@ -1135,13 +1220,16 @@ layer.addEventListener("click", ev => {
   const mm = t.closest("[data-mmode]"); if (mm) { readManual(); st.income = mm.dataset.mmode === "in"; st.payment = st.income ? "racun" : "gotovina"; drawSheet(); return; }
 });
 layer.addEventListener("change", ev => {
+  // rečenica iz polja (napisana ili izdiktirana tastaturom) popuni ostala polja
+  if (ev.target.id === "m-say" && S.sheet?.kind === "manual") { readManual(); if (S.sheet.said.trim()) { applySaid(S.sheet.said.trim()); redrawKeep(); } return; }
+  if (S.sheet?.kind === "manual" && ev.target.matches("[data-mamt]")) { readManual(); redrawKeep(); return; }
   if (ev.target.id === "o-retake" && ev.target.files[0]) { startOcr(ev.target.files[0]); return; }
   // zbir artikala se osveži kad se promeni iznos
   if (S.sheet?.kind === "ocr" && (ev.target.matches("[data-oamt]") || ev.target.id === "o-total")) {
     const y = layer.querySelector(".sheet").scrollTop; readOcr(); drawSheet(); layer.querySelector(".sheet").scrollTop = y;
   }
 });
-document.addEventListener("keydown", ev => { if (ev.key === "Escape") { if (document.getElementById("cam")) closeCam(); else if (S.sheet) { S.sheet = null; drawSheet(); } } });
+document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.id === "m-say") { ev.preventDefault(); ev.target.blur(); return; } if (ev.key === "Escape") { if (document.getElementById("cam")) closeCam(); else if (S.sheet) { S.sheet = null; drawSheet(); } } });
 
 /* ---------- nova verzija ---------- */
 // Telefon često samo vrati app iz pozadine sa starom verzijom. Kad se app vrati na ekran,

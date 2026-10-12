@@ -321,3 +321,15 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 .krow .n { font-size: 15px; line-height: 20px; overflow-wrap: anywhere }
 .krow .v { font-size: 15px }
 .krow .meta { grid-column: 1 / -1; font-size: 11px; letter-spacing: .1em }
+
+/* unos rečenicom i glasom */
+.say { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 8px 10px; align-items: center; padding: 12px 0 4px; border-bottom: 1px solid var(--line) }
+.say input { font: inherit; font-size: 16px; border: 0; background: transparent; padding: 10px 0; min-width: 0; width: 100%; color: var(--ink); border-radius: 0 }
+.say input:focus { outline: none }
+.say .note { grid-column: 1 / -1; margin: 0 0 6px }
+.saybtn { display: inline-flex; align-items: center; gap: 8px; border: 0; background: var(--ink); color: var(--bg); padding: 10px 14px 10px 12px; font: inherit; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer }
+.say.on { grid-template-columns: minmax(0,1fr) }
+.say.on .saybtn { background: var(--wine); color: #f1ece0; justify-content: center; animation: kp-listen 1.2s ease-in-out infinite }
+@keyframes kp-listen { 50% { opacity: .78 } }
+.cam .bottom .btn svg { vertical-align: -3px }
+.cam .bottom [data-voice] { display: inline-flex; align-items: center; gap: 6px }
