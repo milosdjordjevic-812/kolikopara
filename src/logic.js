@@ -22,7 +22,7 @@ export const CATS = [
   { id: "provizije",    name: "Banka i provizije",   kind: "spend" },
   { id: "ostalo",       name: "Ostalo",              kind: "spend" },
   { id: "nerazvrstano", name: "Nerazvrstano",        kind: "spend" },
-  { id: "interno",      name: "Moj prenos",          kind: "neutral" },
+  { id: "interno",      name: "Između mojih računa", kind: "neutral" },
   { id: "priliv",       name: "Priliv",              kind: "income" },
   { id: "prolazno",     name: "Prolazno",            kind: "pass" },
 ];

@@ -56,3 +56,17 @@ test("koliko imaš: stanje + uplata - potrošnja, uplata se ne broji dvaput kad 
   assert.equal(L.filter(e => e.amount > 0).length, 1);
   assert.equal(balance(st.receipts, L).now, 183500);
 });
+
+test("prolazni novac: primljen i poslat dalje ne menja Koliko imaš", async () => {
+  const { derive, balance } = await import("../src/logic.js");
+  const m = (id, cat, total, extra = {}) => ({ id, kind: "manual", cat, total, issued_at: "2026-10-12T12:00:00", created_at: "2026-10-12T10:0" + id + ":00Z", payment: "racun", items: [], person: "", ...extra });
+  const stanje = { ...m("0", "stanje", 50000), created_at: "2026-10-12T09:00:00Z" };
+  const akka = m("1", "priliv", 99297, { refund: true, merchant: "Akka Studio" });
+  const ulaz = m("2", "prolazno", 12900, { refund: true, merchant: "TR Ogistea", person: "Hristijan" });
+  const izlaz = m("3", "prolazno", 12900, { merchant: "Aleksa", person: "Hristijan" });
+  const st = { tx: [], receipts: [stanje, akka, ulaz, izlaz] };
+  assert.equal(balance(st.receipts, derive(st)).now, 149297);
+  // ista uplata upisana kao priliv, a slanje kao prenos između mojih računa: stanje bude veće za 12.900
+  const pogresno = { tx: [], receipts: [stanje, akka, { ...ulaz, cat: "priliv" }, { ...izlaz, cat: "interno" }] };
+  assert.equal(balance(pogresno.receipts, derive(pogresno)).now, 149297 + 12900);
+});

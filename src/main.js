@@ -1065,8 +1065,10 @@ function drawIncomeFields(st) {
       <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="0"></label>
       <label class="field"><span class="meta">Datum</span><input id="m-date" type="date" value="${esc(st.date)}"></label>
     </div>
+    <div class="field"><span class="meta">Čiji je novac</span><div class="catgrid"><button class="chip" data-mpass="0" aria-pressed="${!st.pass}">Moj</button><button class="chip" data-mpass="1" aria-pressed="${!!st.pass}">Prolazno, nije moj</button></div></div>
+    ${st.pass ? `<label class="field"><span class="meta">Za koga je, kome ide dalje</span><input id="m-person" list="m-people" value="${esc(st.person)}" placeholder="npr. Hristijan" autocomplete="off"><datalist id="m-people">${personsList().map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>` : ""}
     <div class="field"><span class="meta">Gde je ušlo</span><div class="catgrid">${[["racun", "Na račun"], ["gotovina", "U gotovini"]].map(([p, n]) => `<button class="chip" data-mpay="${p}" aria-pressed="${st.payment === p}">${n}</button>`).join("")}</div></div>
-    <p class="note" style="margin:0">Dodaje se na Koliko imaš. Uplata na račun se upari sa izvodom kad ga ubaciš, pa se ne računa dva puta.</p>`;
+    <p class="note" style="margin:0">${st.pass ? "Prolazni novac se ne dodaje na Koliko imaš. Kad ga pošalješ dalje, upiši i taj trošak kao Prolazno, pa se ni on ne oduzima." : "Dodaje se na Koliko imaš. Uplata na račun se upari sa izvodom kad ga ubaciš, pa se ne računa dva puta."}</p>`;
 }
 function readManual() {
   const st = S.sheet;
@@ -1086,10 +1088,11 @@ function applySaid(text) {
   if (!r.desc && r.amount == null) { st.sayNote = "Nisam razumeo. Probaj ovako: pijaca, paradajz 230, krastavac 120."; return; }
   st.income = r.income;
   if (r.desc) st.desc = r.desc;
+  if (r.income) st.pass = !!r.pass;
   st.amount = r.amount != null ? amtStr(r.amount) : "";
   st.payment = r.payment || (r.income ? "racun" : st.payment === "racun" && !r.income ? "gotovina" : st.payment);
   st.date = r.dayOffset ? dstrBack(today(), -r.dayOffset) : today();
-  if (!r.income) { st.items = r.items.map(i => ({ name: i.name, total: amtStr(i.total), qty: i.qty })); if (r.cat) st.cat = r.cat; }
+  if (!r.income) { st.items = r.items.map(i => ({ name: i.name, total: amtStr(i.total), qty: i.qty })); if (r.pass) st.cat = "prolazno"; else if (r.cat) st.cat = r.cat; }
   st.sayNote = r.income ? "Proveri ime i iznos, pa sačuvaj." : r.items.length ? `Upisano ${stavki(r.items.length)}. Proveri pa sačuvaj.` : "Proveri pa sačuvaj.";
 }
 
@@ -1184,11 +1187,11 @@ async function saveManual() {
   if ((!isFinite(amt) || amt <= 0) && items.length) amt = Math.round(items.reduce((a, it) => a + it.total, 0) * 100) / 100;
   if (!isFinite(amt) || amt <= 0) { toast("Upiši iznos"); return; }
   if (!st.desc.trim()) { toast(st.income ? "Upiši od koga je uplata" : "Upiši na šta je potrošeno"); return; }
-  if (st.cat === "prolazno" && !st.person) { toast("Upiši za koga je ovaj novac"); return; }
+  if ((st.income ? st.pass : st.cat === "prolazno") && !st.person) { toast("Upiši za koga je ovaj novac"); return; }
   let cat = st.cat;
   if (!st.income && cat === "nerazvrstano") cat = guessCat({ income: false, desc: st.desc.trim(), items }, S.data.rules) || cat;
   const row = st.income
-    ? { kind: "manual", issued_at: (st.date || today()) + "T12:00:00", merchant: st.desc.trim(), store: "", total: amt, payment: st.payment, refund: true, items: [], cat: "priliv", person: "" }
+    ? { kind: "manual", issued_at: (st.date || today()) + "T12:00:00", merchant: st.desc.trim(), store: "", total: amt, payment: st.payment, refund: true, items: [], cat: st.pass ? "prolazno" : "priliv", person: st.pass ? st.person : "" }
     : { kind: "manual", issued_at: (st.date || today()) + "T12:00:00", merchant: st.desc.trim(), store: "", total: amt, payment: st.payment, refund: false, items, cat, person: cat === "prolazno" ? st.person : "" };
   const saved = await guard(() => insertReceipt(row), st.income ? "Uplata sačuvana" : "Sačuvano");
   if (!saved) return;
@@ -1245,6 +1248,7 @@ layer.addEventListener("click", ev => {
   if (t.closest("[data-msave]")) { saveManual(); return; }
   if (st.kind === "manual") {
     if (t.closest("[data-mvoice]")) { toggleVoice(); return; }
+    const mps = t.closest("[data-mpass]"); if (mps) { readManual(); st.pass = mps.dataset.mpass === "1"; redrawKeep(); return; }
     if (t.closest("[data-madd]")) { readManual(); st.items.push({ name: "", total: "", qty: 1 }); redrawKeep(); const ins = layer.querySelectorAll("[data-mname]"); if (ins.length) ins[ins.length - 1].focus(); return; }
     const md = t.closest("[data-mdel]"); if (md) { readManual(); st.items.splice(+md.dataset.mdel, 1); redrawKeep(); return; }
   }

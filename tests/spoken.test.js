@@ -48,3 +48,14 @@ test("hiljade i decimale", () => {
   assert.equal(parseSpoken("uradi sam dve i po hiljade").amount, 2500);
   assert.equal(parseSpoken("uradi sam 2.400").cat, "kucaauto");
 });
+
+test("prolazno: uplata i trošak", () => {
+  const u = parseSpoken("TR Ogistea uplata 12 900 prolazno");
+  assert.equal(u.income, true);
+  assert.equal(u.pass, true);
+  assert.equal(u.desc, "Tr ogistea");
+  assert.equal(u.amount, 12900);
+  const t = parseSpoken("Aleksa 12 900 prolazno");
+  assert.equal(t.pass, true);
+  assert.equal(t.desc, "Aleksa");
+});

@@ -9,7 +9,7 @@ const UNITS = { nula: 0, jedan: 1, jedna: 1, jedno: 1, dva: 2, dve: 2, dvije: 2,
   sto: 100, stotinu: 100, dvesta: 200, dvjesto: 200, dvesto: 200, trista: 300, tristo: 300, cetiristo: 400, petsto: 500, sesto: 600, sedamsto: 700, osamsto: 800, devetsto: 900 };
 const BIG = { hiljada: 1000, hiljadu: 1000, hiljade: 1000, tisuca: 1000, tisucu: 1000, tisuce: 1000, hiljadarki: 1000, soma: 1000, milion: 1e6, miliona: 1e6, milijun: 1e6 };
 const QTY = /^(kila|kile|kilo|kg|kilograma|kilogram|komada|komad|kom|kesa|kese|litra|litar|litre|l|paklice|paklica|pakle|pakla)$/;
-const FILL = new Set(["dinara", "dinar", "din", "rsd", "dinare", "potrosio", "potrosila", "kupio", "kupila", "kupili", "platio", "platila", "dao", "dala", "sam", "smo", "je", "mi", "danas", "juce", "jucer", "prekjuce",
+const FILL = new Set(["prolazno", "prolazna", "prolazni", "dinara", "dinar", "din", "rsd", "dinare", "potrosio", "potrosila", "kupio", "kupila", "kupili", "platio", "platila", "dao", "dala", "sam", "smo", "je", "mi", "danas", "juce", "jucer", "prekjuce",
   "gotovinom", "gotovina", "kes", "kesom", "cash", "karticom", "kartica", "na", "ruke", "racun", "racuna", "uplata", "uplate", "uplatio", "uplatila", "uplatili", "priliv", "stiglo", "stigla", "stigao", "leglo", "legla", "legao",
   "dobio", "dobila", "od", "za", "u", "iznos", "ukupno", "to", "ovo", "evo", "i", "a", "plus", "pa"]);
 
@@ -51,6 +51,7 @@ export function parseSpoken(text, { incomeNames = [], rules = [] } = {}) {
   const res = { text: raw, income: false, desc: "", amount: null, items: [], payment: null, dayOffset: 0, cat: null };
   if (!low) return res;
 
+  res.pass = /\bprolazn/.test(low);
   if (/\bprekjuce\b/.test(low)) res.dayOffset = -2; else if (/\bjuce(r)?\b/.test(low)) res.dayOffset = -1;
   if (/\b(gotovin\w*|kes\w*|cash|na ruke)\b/.test(low)) res.payment = "gotovina";
   else if (/\bkartic\w*/.test(low)) res.payment = "kartica";
