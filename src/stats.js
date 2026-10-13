@@ -1,5 +1,5 @@
 // Statistike i upozorenja za profil. Čiste funkcije nad listom stavki iz derive(), bez DOM-a.
-import { CAT, totals, upper } from "./logic.js";
+import { CAT, FIXED, totals, upper } from "./logic.js";
 
 const r2 = n => Math.round(n * 100) / 100;
 const DAY = 864e5;
@@ -18,23 +18,24 @@ export const NONESSENTIAL = ["cigarete", "alkohol", "izlasci", "dostava", "taksi
  * prvi put: na dan podizanja, ili na dan računa ako je račun plaćen gotovinom koja nije podignuta
  * sa računa (npr. gotovinska uplata). Zbir svih dana je isti kao potrošnja u pregledu.
  */
-export function dailySpend(list) {
-  const nonCash = {}, W = {}, C = {}, SV = {};
+export function dailySpend(list, skip = null) {
+  const nonCash = {}, W = {}, C = {}, SV = {}, CK = {};
   for (const e of list) for (const p of e.parts) {
     const c = CAT[p.cat]; if (!c) continue;
     if (p.cat === "gotovina") { W[e.d] = (W[e.d] || 0) - p.amount; continue; }
     if (p.cat === "stednja") { if (p.amount < 0) SV[e.d] = (SV[e.d] || 0) - p.amount; continue; }
     if (c.kind !== "spend") continue;
+    if (skip && skip.has(c.id)) { if (e.cash) CK[e.d] = (CK[e.d] || 0) - p.amount; continue; }
     if (e.cash) C[e.d] = (C[e.d] || 0) - p.amount; else nonCash[e.d] = (nonCash[e.d] || 0) - p.amount;
   }
-  const days = [...new Set([...Object.keys(nonCash), ...Object.keys(W), ...Object.keys(C), ...Object.keys(SV)])].sort();
+  const days = [...new Set([...Object.keys(nonCash), ...Object.keys(W), ...Object.keys(C), ...Object.keys(SV), ...Object.keys(CK)])].sort();
   // gotovina se sabira u okviru meseca, kao u pregledu, pa se mesečni zbirovi slažu
-  const out = {}; let cw = 0, cc = 0, cs = 0, counted = 0, mon = "";
+  const out = {}; let cw = 0, cc = 0, cs = 0, ck = 0, counted = 0, mon = "";
   for (const d of days) {
-    if (d.slice(0, 7) !== mon) { mon = d.slice(0, 7); cw = cc = cs = counted = 0; }
-    cw += W[d] || 0; cc += C[d] || 0; cs += SV[d] || 0;
+    if (d.slice(0, 7) !== mon) { mon = d.slice(0, 7); cw = cc = cs = ck = counted = 0; }
+    cw += W[d] || 0; cc += C[d] || 0; cs += SV[d] || 0; ck += CK[d] || 0;
     // podignuta gotovina stavljena u kasicu nije potrošnja
-    const now = Math.max(cw - cs, cc, 0), cash = now - counted; counted = now;
+    const now = Math.max(cw - cs - ck, cc, 0), cash = now - counted; counted = now;
     out[d] = r2((nonCash[d] || 0) + cash);
   }
   return out;
@@ -43,8 +44,8 @@ export function dailySpend(list) {
 const sumRange = (daily, from, to) => { let s = 0; for (let n = dnum(from); n <= dnum(to); n++) s += daily[dstr(n)] || 0; return r2(s); };
 
 // Danas, nedelja, mesec, prošli mesec, prosek, tempo do kraja meseca
-export function rhythm(list, today) {
-  const daily = dailySpend(list);
+export function rhythm(list, today, skip = null) {
+  const daily = dailySpend(list, skip);
   const t = dnum(today), wd = weekday(today), ym = monthOf(today), dom = +today.slice(8, 10);
   const pm = prevMonth(ym), pmDays = daysInMonth(pm);
   const first = Object.keys(daily).sort()[0] || today;
@@ -72,11 +73,11 @@ export function seriesWeeks(daily, today, n = 10) {
   for (let i = n - 1; i >= 0; i--) { const a = mon - i * 7; out.push({ key: dstr(a), v: sumRange(daily, dstr(a), dstr(Math.min(a + 6, t))), partial: i === 0 }); }
   return out;
 }
-export function seriesMonths(list, today, n = 6) {
+export function seriesMonths(list, today, n = 6, skip = null) {
   const out = []; let ym = monthOf(today);
   const months = [];
   for (let i = 0; i < n; i++) { months.unshift(ym); ym = prevMonth(ym); }
-  for (const m of months) out.push({ key: m, v: totals(list.filter(e => e.d.startsWith(m))).spend, partial: m === monthOf(today) });
+  for (const m of months) out.push({ key: m, v: totals(list.filter(e => e.d.startsWith(m)), skip).spend, partial: m === monthOf(today) });
   return out;
 }
 
@@ -224,3 +225,27 @@ export function habits(list, today) {
 }
 
 function dShort(d) { const [, m, dd] = String(d).slice(0, 10).split("-"); return `${+dd}.${+m}.`; }
+
+/*
+ * Koliko smeš dnevno da bi novac (Ostalo) potrajao do datuma "until".
+ * Od toga se prvo odvoje stalni troškovi (računi i pretplate) koji se još očekuju do tog datuma:
+ * mesečni iznos je ono što je plaćeno prošlog meseca (ili ovog do danas, ako za prošli nema podataka), umanjen za ono što je ovog meseca već plaćeno.
+ * Računa se od početka današnjeg dana, pa se vidi i koliko je za danas još ostalo.
+ */
+export function dailyBudget(now, list, today, until) {
+  const t = dnum(today), u = Math.max(t, dnum(until));
+  const daysLeft = u - t + 1;
+  const ym = monthOf(today), pm = prevMonth(ym);
+  const fx = l => { const T = totals(l); let s = 0; for (const id of FIXED) if (T.by[id]) s += -T.by[id].sum; return r2(s); };
+  const paid = fx(list.filter(e => e.d.startsWith(ym) && e.d <= today));
+  const last = fx(list.filter(e => e.d.startsWith(pm)));
+  const monthly = last > 0 ? last : paid;
+  // do kraja ovog meseca još ono što fali do uobičajenog iznosa, i ceo iznos za svaki sledeći početak meseca do datuma
+  let reserve = Math.max(0, r2(monthly - paid)), months = 0;
+  for (let n = t + 1; n <= u; n++) if (dstr(n).endsWith("-01")) months++;
+  reserve = r2(reserve + monthly * months);
+  const spentToday = r2(dailySpend(list.filter(e => e.d === today), FIXED)[today] || 0);
+  const pool = r2(now + spentToday - reserve);
+  const perDay = r2(pool / daysLeft);
+  return { until: dstr(u), daysLeft, reserve, monthly, paid, months, perDay, spentToday, leftToday: r2(perDay - spentToday), pool };
+}

@@ -1,6 +1,6 @@
 import "./style.css";
 import { sb, configured, loadAll, saveOverride, deleteOverride, saveRule, deleteRule, insertReceipt, updateReceipt, deleteReceipt, replaceBankRange, importBackup, exportBackup } from "./db.js";
-import { CATS, CAT, catName, derive, totals, balance, savings, META_CATS, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
+import { CATS, CAT, catName, derive, totals, balance, savings, FIXED, META_CATS, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
 import { parseIps, isFiscalUrl, fiscalUrl, latin } from "./shared/fiscal.js";
 import { startCamera, grabFrame, decodePhotoQr } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
@@ -8,7 +8,7 @@ import { icon, catIcon } from "./icons.js";
 import { shouldPlayIntro, playIntro } from "./intro.js";
 import { basket, amountText } from "./items.js";
 import { parseSpoken, guessCat } from "./spoken.js";
-import { rhythm, seriesDays, seriesWeeks, seriesMonths, categoryCompare, insights, nonEssential, habits } from "./stats.js";
+import { rhythm, seriesDays, seriesWeeks, seriesMonths, categoryCompare, insights, nonEssential, habits, dailyBudget } from "./stats.js";
 
 /* ---------- pomoćne ---------- */
 const nf0 = new Intl.NumberFormat("sr-Latn-RS", { maximumFractionDigits: 0 });
@@ -28,6 +28,11 @@ const puta = n => n + " " + (n % 10 === 1 && n % 100 !== 11 ? "put" : "puta");
 const PAYNAME = { gotovina: "Gotovina", kartica: "Kartica", racun: "Sa računa" };
 
 /* ---------- tema: sistem, svetla ili tamna ---------- */
+// prosečna potrošnja: sve, ili bez računa i pretplata (to se ionako plaća svakog meseca)
+function getAvg() { try { return localStorage.getItem("kp-avg") === "bez" ? "bez" : "sve"; } catch (_) { return "sve"; } }
+function setAvg(v) { try { localStorage.setItem("kp-avg", v); } catch (_) {} }
+const avgSkip = () => (getAvg() === "bez" ? FIXED : null);
+const avgChips = () => `<div class="periods avgsw">${[["sve", "Sve"], ["bez", "Bez računa i pretplata"]].map(([id, n]) => `<button class="chip" data-avg="${id}" aria-pressed="${getAvg() === id}">${n}</button>`).join("")}</div>`;
 function getTheme() { try { return localStorage.getItem("kp-theme") || "svetla"; } catch (_) { return "svetla"; } }
 function applyTheme(t) {
   const root = document.documentElement;
@@ -209,7 +214,9 @@ function renderOverview() {
     <div class="haverow"><button class="have add" data-income><span class="meta">+ Uplata</span></button><button class="have add" data-go="profil"><span class="meta">Statistika</span></button><button class="have add" data-go="korpa"><span class="meta">Korpa</span></button><button class="have add" data-go="stednja"><span class="meta">Štednja</span></button></div>
     <div class="wallet" id="wallet"></div>
     <div class="actions"><button class="cta big" data-scan>[ Skeniraj račun ]</button></div>
-    <p class="sub"><span>${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno</span> ${money(T.spend / span)} dinara dnevno. <span>Bez prolaznog novca i prenosa između tvojih računa.</span></p>
+    ${budgetLine()}
+    <p class="sub"><span>${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno</span> ${money((avgSkip() ? totals(L, FIXED).spend : T.spend) / span)} dinara dnevno. <span>Bez prolaznog novca i prenosa između tvojih računa${avgSkip() ? ", bez računa i pretplata" : ""}.</span></p>
+    ${avgChips()}
   </div>
   <div class="strip">
     <div><span class="meta dim">Gotovina bez računa</span><span class="v num">${money(T.unexplained)}</span></div>
@@ -434,12 +441,12 @@ function barChart(data, { label, avg = null, id }) {
 const MON3 = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "avg", "sep", "okt", "nov", "dec"];
 function renderProfile() {
   const L = list(), td = today(), b = bal(), pr = profRow();
-  const R = rhythm(L, td), ins = insights(L, td, b), ne = nonEssential(L, td), hb = habits(L, td), cc = categoryCompare(L, td).slice(0, 7);
+  const R = rhythm(L, td, avgSkip()), ins = insights(L, td, b), ne = nonEssential(L, td), hb = habits(L, td), cc = categoryCompare(L, td).slice(0, 7);
   const mode = S.chart || "dani";
   const chart = mode === "nedelje"
     ? barChart(seriesWeeks(R.daily, td, 10), { id: "ch", label: d => dShort(d.key) })
     : mode === "meseci"
-      ? barChart(seriesMonths(L, td, 6), { id: "ch", label: d => MON3[+d.key.slice(5) - 1] })
+      ? barChart(seriesMonths(L, td, 6, avgSkip()), { id: "ch", label: d => MON3[+d.key.slice(5) - 1] })
       : barChart(seriesDays(R.daily, td, 30), { id: "ch", label: d => dShort(d.key), avg: R.avg30 });
   const ccMax = Math.max(1, ...cc.map(r => Math.max(r.now, r.before)));
   const WD = ["ponedeljkom", "utorkom", "sredom", "četvrtkom", "petkom", "subotom", "nedeljom"];
@@ -456,7 +463,9 @@ function renderProfile() {
   </div>
 
   <section>
-    <div class="sec-h"><h2>${icon("ritam", 26)} Ritam</h2><span class="meta dim">Bez prolaznog novca</span></div>
+    <div class="sec-h"><h2>${icon("ritam", 26)} Ritam</h2><span class="meta dim">Bez prolaznog novca${avgSkip() ? ", računa i pretplata" : ""}</span></div>
+    ${avgChips()}
+    ${budgetFacts()}
     <div class="tiles">
       ${tile("Danas", R.today, cmpLine(R.today, R.avg30, "proseka"))}
       ${tile("Ova nedelja", R.week, cmpLine(R.week, R.lastWeekSame, "prošle"))}
@@ -603,6 +612,55 @@ function renderBasket() {
           <span class="meta dim">${esc(amountText({ ...g, pieces: i.pieces, weight: i.weight }))}, ${esc(i.stores.join(", "))}, poslednji put ${esc(dShort(i.last))}</span></div>`).join("")}</div>` : ""}`;
     }).join("") || `<div class="empty"><span class="meta dim">Nema artikala</span></div>`}</div>
   </section>`;
+}
+
+/* ---------- koliko smeš dnevno ---------- */
+const endOfMonth = d => { const [y, m] = d.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
+function planRow() { return S.data.receipts.filter(r => r.cat === "plan").sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || ""))).pop(); }
+// do kog dana novac treba da potraje: upisan datum, ili kraj meseca (i kad upisan datum prođe)
+function planUntil() { const r = planRow(), td = today(), d = r ? String(r.issued_at).slice(0, 10) : ""; return r && r.merchant !== "auto" && d >= td ? d : endOfMonth(td); }
+function budget() { const b = bal(); return b ? dailyBudget(b.now, list(), today(), planUntil()) : null; }
+function budgetLine() {
+  const B = budget(); if (!B) return "";
+  return `<button class="budget" data-plan><span class="label">Smeš dnevno</span><span class="bnum num">${B.perDay < 0 ? "-" : ""}${money(B.perDay)}</span><span class="meta">do ${esc(dShort(B.until))}${B.perDay > 0 ? `, danas još ${B.leftToday < 0 ? "-" : ""}${money(B.leftToday)}` : ""}</span></button>`;
+}
+function budgetFacts() {
+  const B = budget(); if (!B) return "";
+  return `<div class="facts" style="margin-top:14px">
+    <div><span class="meta dim">Smeš dnevno do ${esc(dShort(B.until))}</span><span>${B.perDay < 0 ? "-" : ""}${money(B.perDay)} RSD, ${B.daysLeft} ${B.daysLeft % 10 === 1 && B.daysLeft % 100 !== 11 ? "dan" : "dana"}</span></div>
+    <div><span class="meta dim">Danas</span><span>potrošeno ${money(B.spentToday)}, ostalo ${B.leftToday < 0 ? "-" : ""}${money(B.leftToday)} RSD</span></div>
+    <div><span class="meta dim">Odvojeno za račune i pretplate</span><span>${money(B.reserve)} RSD</span></div>
+  </div>
+  <div class="row-btns" style="margin-top:10px"><button class="btn" data-plan>Promeni datum</button></div>`;
+}
+function openPlan() { S.sheet = { kind: "plan", date: planUntil() }; drawSheet(); }
+function drawPlanSheet() {
+  const st = S.sheet, b = bal(), B = b ? dailyBudget(b.now, list(), today(), st.date) : null;
+  layer.innerHTML = `<div class="scrim" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true"><div class="sheet-in">
+    <span class="meta dim">Do sledeće uplate, ili do kraja meseca</span>
+    <h3>Koliko smeš dnevno</h3>
+    ${B ? `<div class="num" style="font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1">${B.perDay < 0 ? "-" : ""}${money(B.perDay)} <span class="meta dim">RSD dnevno</span></div>
+    <div class="hrows">
+      <div><span>Ostalo sada</span><span class="num">${b.now < 0 ? "-" : ""}${money(b.now)}</span></div>
+      ${B.spentToday ? `<div><span>Potrošeno danas</span><span class="num">+${money(B.spentToday)}</span></div>` : ""}
+      <div><span>Računi i pretplate do tada</span><span class="num">${B.reserve ? "-" : ""}${money(B.reserve)}</span></div>
+      <div><span>Podeljeno na ${B.daysLeft} ${B.daysLeft % 10 === 1 && B.daysLeft % 100 !== 11 ? "dan" : "dana"}, sa današnjim</span><span class="num">${B.perDay < 0 ? "-" : ""}${money(B.perDay)}</span></div>
+    </div>
+    <p class="note" style="margin:0">${B.pool < 0 ? "Ostalo ne pokriva račune i pretplate do tog datuma. " : ""}Računi i pretplate za mesec su procena: ono što si za njih platio prošlog meseca${B.paid ? `, umanjeno za ${money(B.paid)} plaćenih ovog meseca` : ""}. Kasica se ne računa.</p>` : `<p class="note" style="margin:0">Prvo upiši koliko imaš (dodirni Ostalo na početnoj), pa ovde piše koliko smeš dnevno.</p>`}
+    <div class="map">
+      <label class="field"><span class="meta">Do kada treba da izdržiš</span><input id="pl-date" type="date" min="${today()}" value="${esc(st.date)}"></label>
+    </div>
+    <div class="row-btns"><button class="cta" data-plsave>[ Sačuvaj ]</button><button class="btn" data-plauto>Do kraja meseca</button><button class="btn" data-close>Zatvori</button></div>
+  </div></div>`;
+}
+async function savePlan(auto) {
+  const d = auto ? endOfMonth(today()) : (document.getElementById("pl-date").value || "");
+  if (!auto && (!d || d < today())) { toast("Izaberi današnji ili kasniji datum"); return; }
+  const row = { kind: "manual", cat: "plan", refund: false, total: 0, issued_at: d + "T12:00:00", merchant: auto ? "auto" : "", store: "", payment: "racun", items: [], person: "" };
+  const saved = await guard(() => insertReceipt(row), "Sačuvano");
+  if (!saved) return;
+  S.data.receipts.push({ ...saved, created_at: saved.created_at || new Date().toISOString() }); S.sheet = null; drawSheet(); render();
 }
 
 /* ---------- štednja: kasica u gotovini ---------- */
@@ -767,6 +825,7 @@ function drawSheet() {
   if (st.kind === "manual") return drawManual();
   if (st.kind === "save") return drawSaveSheet();
   if (st.kind === "goal") return drawGoalSheet();
+  if (st.kind === "plan") return drawPlanSheet();
   if (st.kind === "ocrwait") return drawOcrWait();
   if (st.kind === "ocr") return drawOcr();
   if (st.kind === "have") return drawHave();
@@ -1321,6 +1380,8 @@ app.addEventListener("click", async ev => {
   if (t.closest("[data-save-in]")) { openSave(false); return; }
   if (t.closest("[data-save-out]")) { openSave(true); return; }
   if (t.closest("[data-goal]")) { openGoal(); return; }
+  if (t.closest("[data-plan]")) { openPlan(); return; }
+  const av = t.closest("[data-avg]"); if (av) { setAvg(av.dataset.avg); const y = window.scrollY; render(); window.scrollTo(0, y); return; }
   const kp = t.closest("[data-kper]"); if (kp) { S.kper = kp.dataset.kper; S.kopen = null; render(); return; }
   const kg = t.closest("[data-kgrp]"); if (kg) { S.kopen = S.kopen === kg.dataset.kgrp ? null : kg.dataset.kgrp; const y = window.scrollY; render(); window.scrollTo(0, y); return; }
   const chm = t.closest("[data-chart]"); if (chm) { S.chart = chm.dataset.chart; const y = window.scrollY; render(); window.scrollTo(0, y); return; }
@@ -1359,6 +1420,8 @@ layer.addEventListener("click", ev => {
   const mc = t.closest("[data-mcat]"); if (mc) { readManual(); st.cat = mc.dataset.mcat; drawSheet(); return; }
   if (t.closest("[data-msave]")) { saveManual(); return; }
   if (t.closest("[data-ssave]")) { saveSave(); return; }
+  if (t.closest("[data-plsave]")) { savePlan(false); return; }
+  if (t.closest("[data-plauto]")) { savePlan(true); return; }
   if (t.closest("[data-gsave]")) { saveGoal(false); return; }
   if (t.closest("[data-gdel]")) { saveGoal(true); return; }
   if (st.kind === "manual") {

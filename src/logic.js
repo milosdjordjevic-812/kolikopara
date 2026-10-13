@@ -29,7 +29,8 @@ export const CATS = [
 ];
 // zapisi u tabeli računa koji nisu stavke: stanje (koliko imaš na neki dan) i profil (ime i slika)
 // "cilj" je cilj štednje (naziv i iznos); uplate u kasicu su stavke sa kategorijom "stednja"
-export const META_CATS = new Set(["stanje", "profil", "cilj"]);
+// "plan" je datum do kog novac treba da potraje (za Koliko smeš dnevno)
+export const META_CATS = new Set(["stanje", "profil", "cilj", "plan"]);
 export const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 export const catName = id => (CAT[id] || CAT.nerazvrstano).name;
 
@@ -235,8 +236,11 @@ function itemParts(rules, items, amount, base, sign) {
 }
 
 /* Zbirovi za period. Gotovina se umanjuje za račune plaćene gotovinom. */
-export function totals(list) {
-  const by = {}; let bankSpend = 0, inc = 0, W = 0, C = 0, feeConv = 0, Sdep = 0, Snet = 0;
+// stalni mesečni troškovi: računi (i porez) i pretplate; mogu da se izostave iz prosečne potrošnje
+export const FIXED = new Set(["racuni", "pretplate"]);
+// skip: kategorije koje se ne računaju u potrošnju (gotovina plaćena za njih i dalje objašnjava podignut novac)
+export function totals(list, skip = null) {
+  const by = {}; let bankSpend = 0, inc = 0, W = 0, C = 0, Ck = 0, feeConv = 0, Sdep = 0, Snet = 0;
   const add = (cat, v) => { (by[cat] ||= { sum: 0, n: 0 }); by[cat].sum = r2(by[cat].sum + v); by[cat].n++; };
   for (const e of list) {
     if (e.fee) feeConv += -e.fee;
@@ -245,13 +249,14 @@ export function totals(list) {
       if (p.cat === "gotovina") { W += -p.amount; continue; }
       // gotovina stavljena u kasicu nije potrošena; uzeta iz kasice vraća se u ono što imaš
       if (p.cat === "stednja") { Snet += -p.amount; if (p.amount < 0) Sdep += -p.amount; continue; }
+      if (skip && c.kind === "spend" && skip.has(c.id)) { if (e.cash) Ck += -p.amount; continue; }
       add(c.id, p.amount);
       if (c.kind === "spend") { if (e.cash) C += -p.amount; else bankSpend += -p.amount; }
       if (p.amount > 0 && (e.type === "bank" ? c.kind !== "pass" : c.kind === "income")) inc += p.amount;
     }
   }
   const nWithdrawals = list.filter(e => e.parts.some(p => p.cat === "gotovina")).length;
-  const unexplained = Math.max(0, r2(W - C - Sdep));
+  const unexplained = Math.max(0, r2(W - C - Ck - Sdep));
   if (unexplained > 0) { by.gotovina = { sum: -unexplained, n: nWithdrawals }; }
   const spend = r2(bankSpend + C + unexplained);
   return { by, spend, inc: r2(inc), withdrawn: r2(W), cashReceipts: r2(C), unexplained, feeConv: r2(feeConv), saved: r2(Snet) };
