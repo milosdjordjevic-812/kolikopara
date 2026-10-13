@@ -15,6 +15,7 @@ export const CATS = [
   { id: "pretplate",    name: "Pretplate i alati",   kind: "spend" },
   { id: "racuni",       name: "Telefon i računi",    kind: "spend" },
   { id: "apoteka",      name: "Apoteka i drogerija", kind: "spend" },
+  { id: "terapija",     name: "Terapija",            kind: "spend" },
   { id: "kupovina",     name: "Kupovina i stvari",   kind: "spend" },
   { id: "kucaauto",     name: "Kuća, auto, uradi sam", kind: "spend" },
   { id: "hemija",       name: "Kućna hemija i higijena", kind: "spend" },

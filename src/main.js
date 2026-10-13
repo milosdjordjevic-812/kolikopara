@@ -134,11 +134,11 @@ function render() {
   tabbar(true);
   stopWallet(); applyTheme(getTheme()); app.classList.remove("is-empty");
   if (!S.ready) { app.innerHTML = `<div class="top"><div class="logo">[kolko para?]</div></div><div class="empty" style="margin-top:40px"><span class="meta dim">${esc(S.loadError || "Učitavam")}</span></div>`; return; }
-  const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore, profil: renderProfile, korpa: renderBasket, stednja: renderSavings }[S.view] || renderOverview;
+  const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore, profil: renderProfile, korpa: renderBasket, stednja: renderSavings, dan: renderDay }[S.view] || renderOverview;
   v();
 }
 function header() {
-  return `<div class="top"><div class="logo">[kolko para?]</div><div class="topr"><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više", korpa: "Korpa" })[S.view] || "")}</span>${avaBtn()}</div></div>${installHint()}`;
+  return `<div class="top"><div class="logo">[kolko para?]</div><div class="topr"><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više", korpa: "Korpa", dan: "Po danu" })[S.view] || "")}</span>${avaBtn()}</div></div>${installHint()}`;
 }
 function tabbar(show) {
   let bar = document.querySelector(".tabbar");
@@ -151,7 +151,7 @@ function tabbar(show) {
       if (ev.target.closest("[data-scan]")) openScan();
     });
   }
-  const tab = (id, label) => `<button class="tab" data-view="${id}" ${S.view === id ? 'aria-current="page"' : ""}>${icon(id, 22)}<span>${label}</span></button>`;
+  const tab = (id, label) => `<button class="tab" data-view="${id}" ${S.view === id || (id === "stavke" && S.view === "dan") ? 'aria-current="page"' : ""}>${icon(id, 22)}<span>${label}</span></button>`;
   bar.innerHTML = `<div class="tabbar-in">${tab("pregled", "Pregled")}${tab("stavke", "Stavke")}<button class="cta scanbtn" data-scan aria-label="Skeniraj račun ili uplatnicu">[ Skeniraj ]</button>${tab("prolazno", "Prolazno")}${tab("vise", "Više")}</div>`;
 }
 function installHint() {
@@ -290,12 +290,14 @@ function renderList() {
   const sum = L.reduce((s, e) => s + (S.cat ? e.parts.filter(p => p.cat === S.cat).reduce((a, p) => a + p.amount, 0) : e.amount), 0);
   app.innerHTML = `${header()}
   ${periodChips()}
-  <div style="margin-top:22px"><input class="search" id="q" type="search" placeholder="Traži trgovca, artikal ili osobu" value="${esc(S.q)}" aria-label="Pretraga"></div>
+  ${dayPicker(null)}
+  <div style="margin-top:18px"><input class="search" id="q" type="search" placeholder="Traži trgovca, artikal ili osobu" value="${esc(S.q)}" aria-label="Pretraga"></div>
   <div class="filter-on">
     ${S.cat ? `<span class="meta">Kategorija</span><button class="chip" aria-pressed="true" data-clear>${esc(catName(S.cat))} ×</button>` : ""}
     <span class="meta dim num">${stavki(L.length)}, ukupno ${signed(sum)}</span>
   </div>
   ${Object.keys(days).map(d => `<div class="day"><div class="meta dim">${esc(dDay(d))}</div>${days[d].map(e => rowHtml(e, S.cat)).join("")}</div>`).join("") || `<div class="empty"><span class="meta dim">Nema stavki za ovaj izbor</span></div>`}`;
+  bindDayInput();
   const qi = document.getElementById("q");
   qi.addEventListener("input", () => { S.q = qi.value; const pos = qi.selectionStart; renderList(); const n = document.getElementById("q"); n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) {} });
 }
@@ -587,6 +589,44 @@ async function saveCrop() {
   URL.revokeObjectURL(st.src);
   S.sheet = null; drawSheet();
   await saveProfile({ journal: data });
+}
+
+/* ---------- po danu: šta je kupljeno tog dana ---------- */
+function dayPicker(d) {
+  const td = today(), yd = dstrBack(td, 1);
+  return `<div class="periods daypick">
+    ${d ? `<button class="chip" data-dstep="-1" aria-label="Dan ranije">‹</button>` : `<span class="meta">Po danu</span>`}
+    <button class="chip" data-day="0" aria-pressed="${d === td}">Danas</button>
+    <button class="chip" data-day="1" aria-pressed="${d === yd}">Juče</button>
+    <label class="chip datechip" aria-pressed="${!!d && d !== td && d !== yd}">${d && d !== td && d !== yd ? esc(dShort(d) + d.slice(0, 4)) : "Izaberi datum"}<input type="date" id="day-in" max="${td}" value="${esc(d || td)}" aria-label="Izaberi datum"></label>
+    ${d ? `<button class="chip" data-dstep="1" aria-label="Dan kasnije" ${d >= td ? "disabled" : ""}>›</button>` : ""}
+  </div>`;
+}
+function bindDayInput() {
+  const di = document.getElementById("day-in");
+  if (di) di.onchange = () => { if (!di.value) return; S.day = di.value > today() ? today() : di.value; S.view = "dan"; render(); window.scrollTo(0, 0); };
+}
+function renderDay() {
+  const td = today(), d = S.day || td, yd = dstrBack(td, 1);
+  const L = list().filter(e => e.d === d), T = totals(L);
+  const buys = L.filter(e => e.parts.some(p => CAT[p.cat]?.kind === "spend" && p.cat !== "gotovina" && p.amount < 0));
+  const items = L.reduce((n, e) => n + (e.receipt?.items || []).length, 0);
+  const lb = lastBank();
+  const cats = CATS.filter(c => c.kind === "spend" && T.by[c.id] && -T.by[c.id].sum > 0.004).map(c => ({ c, sum: -T.by[c.id].sum })).sort((a, b) => b.sum - a.sum);
+  app.innerHTML = `${header()}
+  <div class="hero"><div><span class="eyebrow">[${esc(dDay(d))}]</span></div><h1>${d === td ? "Danas" : d === yd ? "Juče" : esc(dShort(d))}</h1></div>
+  ${dayPicker(d)}
+  <div class="tiles" style="margin-top:20px">
+    <div class="tile"><span class="meta dim">Potrošeno</span><span class="v num">${money(T.spend)}</span><span class="meta dim">${buys.length} ${buys.length % 10 === 1 && buys.length % 100 !== 11 ? "kupovina" : "kupovine"}${items ? `, ${stavki(items).replace("stavk", "artik").replace("artika", "artikla").replace("artiki", "artikala")}` : ""}</span></div>
+    <div class="tile"><span class="meta dim">${T.inc ? "Uplate" : "Najviše na"}</span><span class="v num">${T.inc ? money(T.inc) : cats[0] ? money(cats[0].sum) : "0"}</span><span class="meta dim">${T.inc ? "tog dana" : cats[0] ? esc(cats[0].c.name) : "ništa"}</span></div>
+  </div>
+  ${cats.length > 1 ? `<div class="facts" style="margin-top:12px">${cats.map(x => `<div><span class="meta dim">${esc(x.c.name)}</span><span class="num">${money(x.sum)} RSD</span></div>`).join("")}</div>` : ""}
+  <section style="margin-top:22px">
+    ${L.map(e => rowHtml(e) + ((e.receipt?.items || []).length ? `<div class="kitems">${e.receipt.items.map(it => `<div class="krow"><span class="n">${esc(String(it.name).replace(/^\s*\d{4,8}\s+(?=\D)/, ""))}</span><span class="v num">${money(it.total, true)}</span>${it.qty && it.qty !== 1 ? `<span class="meta dim">${String(it.qty).replace(".", ",")} x ${money(it.price || it.total / it.qty, true)}</span>` : ""}</div>`).join("")}</div>` : "")).join("")
+      || `<div class="empty"><span class="meta dim">Tog dana nema ništa upisano</span></div>`}
+  </section>
+  ${lb && lb < d ? `<p class="note">Izvod iz banke je ubačen do ${esc(dShort(lb) + lb.slice(0, 4))}. Plaćanja karticom posle toga vide se ovde samo ako si skenirao račun ili ih upisao.</p>` : ""}`;
+  bindDayInput();
 }
 
 /* ---------- korpa: šta je kupljeno, po vrstama artikala ---------- */
@@ -1381,6 +1421,8 @@ app.addEventListener("click", async ev => {
   if (t.closest("[data-save-out]")) { openSave(true); return; }
   if (t.closest("[data-goal]")) { openGoal(); return; }
   if (t.closest("[data-plan]")) { openPlan(); return; }
+  const dy = t.closest("[data-day]"); if (dy) { S.day = dstrBack(today(), +dy.dataset.day); S.view = "dan"; render(); window.scrollTo(0, 0); return; }
+  const dsp = t.closest("[data-dstep]"); if (dsp) { const n = dstrBack(S.day || today(), -dsp.dataset.dstep); S.day = n > today() ? today() : n; render(); return; }
   const av = t.closest("[data-avg]"); if (av) { setAvg(av.dataset.avg); const y = window.scrollY; render(); window.scrollTo(0, y); return; }
   const kp = t.closest("[data-kper]"); if (kp) { S.kper = kp.dataset.kper; S.kopen = null; render(); return; }
   const kg = t.closest("[data-kgrp]"); if (kg) { S.kopen = S.kopen === kg.dataset.kgrp ? null : kg.dataset.kgrp; const y = window.scrollY; render(); window.scrollTo(0, y); return; }

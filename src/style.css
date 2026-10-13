@@ -346,3 +346,10 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 .avgsw { margin-top: 12px; flex-wrap: wrap }
 .band .avgsw { justify-content: center; margin-top: 10px }
 .band .avgsw .chip { font-size: 12px }
+
+/* po danu */
+.daypick { margin-top: 16px; align-items: center; flex-wrap: wrap }
+.daypick > .meta { margin-right: 4px }
+.datechip { position: relative; overflow: hidden; cursor: pointer }
+.datechip input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; margin: 0; cursor: pointer; font-size: 16px }
+.daypick .chip[disabled] { opacity: .35 }
