@@ -25,6 +25,12 @@ export function decodeImageData(img) {
   try { return new TextDecoder("utf-8").decode(new Uint8Array(r.binaryData)); } catch (_) { return null; }
 }
 
+// QR sa fotografije (kamera telefona): prvo ZXing, pa jsQR
+export async function decodePhotoQr(file) {
+  try { const m = await zx(); const r = await m.readBarcodes(file, { formats: ["QRCode"], tryHarder: true, maxNumberOfSymbols: 1 }); if (r.length && r[0].text) return r[0].text; } catch (_) {}
+  try { return await decodeFile(file); } catch (_) { return null; }
+}
+
 export async function decodeFile(file) {
   const url = URL.createObjectURL(file);
   try {
@@ -81,19 +87,46 @@ export function startCamera(video, onResult, onError, accept = () => true, onRej
   };
 
   function stop() {
-    stopped = true; cancelAnimationFrame(raf);
+    stopped = true; cancelAnimationFrame(raf); clearTimeout(watch);
     if (stream) stream.getTracks().forEach(tr => tr.stop());
     video.srcObject = null;
   }
 
-  navigator.mediaDevices?.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false })
-    .then(s => {
-      if (stopped) { s.getTracks().forEach(tr => tr.stop()); return; }
-      stream = s; video.srcObject = s; video.setAttribute("playsinline", ""); video.muted = true;
-      return video.play().then(() => { raf = requestAnimationFrame(tick); });
-    })
-    .catch(err => { if (!stopped) onError(err); });
-  if (!navigator.mediaDevices?.getUserMedia) setTimeout(() => onError(new Error("no-camera")), 0);
+  // Kamera: prvo velika rezolucija (gust QR), a ako ne krene ili ostane crna, ponovo sa običnim podešavanjima.
+  // Na iPhoneu kamera ume da ostane crna bez ikakve greške (npr. posle povratka appa iz pozadine).
+  const WANT = [
+    { video: { facingMode: { ideal: "environment" }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false },
+    { video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
+    { video: { facingMode: { ideal: "environment" } }, audio: false },
+  ];
+  let attempt = 0, watch = 0, restarts = 0;
+  const live = () => video.readyState >= 2 && video.videoWidth > 0;
+  function open() {
+    if (stopped) return;
+    if (attempt >= WANT.length) { onError(new Error("no-frames")); return; }
+    const want = WANT[attempt++];
+    clearTimeout(watch);
+    watch = setTimeout(() => { if (!stopped && !live()) { drop(); open(); } }, 3000);
+    navigator.mediaDevices.getUserMedia(want)
+      .then(s => {
+        if (stopped) { s.getTracks().forEach(tr => tr.stop()); return; }
+        stream = s; video.setAttribute("playsinline", ""); video.muted = true; video.srcObject = s;
+        // ako sistem ugasi kameru dok je otvorena, upali je ponovo
+        s.getVideoTracks().forEach(tr => tr.addEventListener("ended", () => { if (!stopped && stream === s && restarts++ < 3) { drop(); attempt = Math.max(0, attempt - 1); open(); } }));
+        const play = () => video.play().catch(() => {});
+        play(); video.onloadedmetadata = play;
+        if (!raf) raf = requestAnimationFrame(tick);
+      })
+      .catch(err => {
+        if (stopped) return;
+        clearTimeout(watch);
+        // zabranjena kamera: nema smisla pokušavati dalje
+        if (err && (err.name === "NotAllowedError" || err.name === "SecurityError")) { onError(err); return; }
+        open();
+      });
+  }
+  function drop() { if (stream) stream.getTracks().forEach(tr => tr.stop()); stream = null; video.srcObject = null; }
+  if (navigator.mediaDevices?.getUserMedia) open(); else setTimeout(() => onError(new Error("no-camera")), 0);
   return stop;
 }
 

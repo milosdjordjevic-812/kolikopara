@@ -2,7 +2,7 @@ import "./style.css";
 import { sb, configured, loadAll, saveOverride, deleteOverride, saveRule, deleteRule, insertReceipt, updateReceipt, deleteReceipt, replaceBankRange, importBackup, exportBackup } from "./db.js";
 import { CATS, CAT, catName, derive, totals, balance, savings, META_CATS, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
 import { parseIps, isFiscalUrl, fiscalUrl, latin } from "./shared/fiscal.js";
-import { startCamera, grabFrame } from "./scan.js";
+import { startCamera, grabFrame, decodePhotoQr } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
 import { shouldPlayIntro, playIntro } from "./intro.js";
@@ -882,6 +882,8 @@ const CAMHINT = {
 };
 function openScan() {
   closeCam();
+  // 3D modeli ispod kamere troše grafiku telefona; dok je kamera otvorena, ugase se
+  stopWallet();
   const cam = document.createElement("div"); cam.className = "cam"; cam.id = "cam"; cam.dataset.mode = "qr";
   cam.innerHTML = `<div class="view"><video autoplay playsinline muted></video><div class="frame"></div><button class="cta close" data-camclose>[ Nazad ]</button>
     <div class="hint" id="cam-hint">${CAMHINT.qr}</div>
@@ -893,8 +895,22 @@ function openScan() {
   document.body.appendChild(cam);
   const hint = cam.querySelector("#cam-hint");
   // QR se traži u oba načina: ako se ipak pročita, račun ide preko QR koda
-  startQr(cam.querySelector("video"), () => { cam.dataset.nocam = "1"; if (cam.dataset.mode === "qr") hint.textContent = "Kamera nije dostupna. Dozvoli kameru u podešavanjima ili izaberi Slikaj tekst računa."; });
-  cam.querySelector("#cam-text").onchange = ev => { const f = ev.target.files[0]; if (f) startOcr(f); };
+  startQr(cam.querySelector("video"), err => {
+    cam.dataset.nocam = "1";
+    hint.textContent = err && err.name === "NotAllowedError"
+      ? "Kamera nije dozvoljena. Dozvoli je u podešavanjima telefona, ili dodirni Slikaj da otvoriš kameru telefona."
+      : "Kamera u appu ne daje sliku. Dodirni Slikaj: otvoriće se kamera telefona, pa slikaj QR kod ili ceo račun.";
+  });
+  cam.querySelector("#cam-text").onchange = async ev => {
+    const f = ev.target.files[0]; ev.target.value = ""; if (!f) return;
+    // slika iz kamere telefona: prvo QR (fiskalni račun ili uplatnica), pa tek onda čitanje teksta
+    if (cam.dataset.mode === "qr") {
+      hint.textContent = "Tražim QR kod na slici";
+      const t = await decodePhotoQr(f);
+      if (t && (isFiscalUrl(t) || parseIps(t))) { handleQr(t); return; }
+    }
+    startOcr(f);
+  };
   cam.addEventListener("click", ev => {
     if (ev.target.closest("[data-camclose]")) closeCam();
     if (ev.target.closest("[data-manual]")) { closeCam(); openManual(); }
@@ -924,7 +940,11 @@ function startQr(video, onErr = () => {}) {
       hint.textContent = `Pročitan je QR koji nije račun ni uplatnica (${t.slice(0, 28)}...). Drži telefon mirno i malo bliže kodu.`;
   });
 }
-function closeCam() { if (stopCam) { stopCam(); stopCam = null; } const c = document.getElementById("cam"); if (c) c.remove(); }
+function closeCam() {
+  if (stopCam) { stopCam(); stopCam = null; }
+  const c = document.getElementById("cam");
+  if (c) { c.remove(); startWallet(); }
+}
 
 async function handleQr(text) {
   const hint = document.getElementById("cam-hint");

@@ -102,6 +102,7 @@ export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width 
   return () => {
     disposed = true; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect();
     document.removeEventListener("visibilitychange", onVis);
-    renderer.dispose(); renderer.domElement.remove();
+    // iPhone drži ograničen broj WebGL konteksta; bez ovoga se gomilaju pri prelasku sa strane na stranu
+    renderer.dispose(); try { renderer.forceContextLoss(); } catch (_) {} renderer.domElement.remove();
   };
 }
