@@ -99,3 +99,16 @@ test("kasica: gotovina stavljena u kasicu nije potrošena, ali se skida sa Kolik
   assert.deepEqual([sv.goal.name, sv.goal.amount, sv.left, sv.pct], ["Letovanje", 100000, 93000, 7]);
   assert.equal(L.find(e => e.id === "r:1").name, "U kasicu");
 });
+
+test("uradi sam: ceo račun je kuća i auto, cigarete i dalje idu u cigarete", async () => {
+  const { derive, totals } = await import("../src/logic.js");
+  const rc = { id: "u", kind: "fiscal", merchant: "URADI SAM DOO BEOGRAD", store: "P200", total: 8359, issued_at: "2026-10-12T11:00:00", payment: "kartica",
+    items: [{ name: "426742 BATERIJA ZA SUDOPERU DOMI", qty: 1, total: 5299 }, { name: "DRŽ. TOAL. PAPIRA SAPUNJERA", qty: 1, total: 899 }, { name: "SUNDJER ZA SUDOVE", qty: 1, total: 2161 }] };
+  const T = totals(derive({ tx: [], receipts: [rc] }));
+  assert.equal(-T.by.kucaauto.sum, 8359);
+  assert.equal(T.by.hemija, undefined);
+  const rc2 = { ...rc, id: "u2", total: 8879, items: [...rc.items, { name: "MARLBORO GOLD", qty: 1, total: 520 }] };
+  const T2 = totals(derive({ tx: [], receipts: [rc2] }));
+  assert.equal(-T2.by.cigarete.sum, 520);
+  assert.equal(-T2.by.kucaauto.sum, 8359);
+});

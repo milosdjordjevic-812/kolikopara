@@ -209,6 +209,7 @@ function bankParts(e, rules) {
   return [{ cat: e.cat, amount: e.amount, person: e.person }];
 }
 
+const STRONG = new Set(["cigarete", "alkohol", "gorivo"]);
 // raspodela iznosa po artiklima; artikli bez posebne kategorije idu u osnovnu
 function itemParts(rules, items, amount, base, sign) {
   if (!items.length) return [{ cat: base, amount }];
@@ -216,7 +217,10 @@ function itemParts(rules, items, amount, base, sign) {
   let covered = 0;
   for (const it of items) {
     const ic = itemCat(rules, it.name);
-    const cat = ic ? ic.cat : base;
+    // u radnji za kuću i auto sve je kuća i auto (držač za toalet papir nije kućna hemija),
+    // osim cigareta, alkohola i goriva, i osim tvog pravila za artikal
+    const keep = base === "kucaauto" && ic && !ic.rule && !STRONG.has(ic.cat);
+    const cat = ic && !keep ? ic.cat : base;
     const val = sign * Math.abs(it.total);
     covered += val;
     if (!by.has(cat)) by.set(cat, { cat, amount: 0, items: [] });

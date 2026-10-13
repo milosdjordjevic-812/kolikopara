@@ -43,7 +43,9 @@ export function itemGroup(name, rules = [], baseCat = "") {
   const u = upper(name);
   const r = rules.length ? itemCat(rules, name) : null;
   if (r && r.rule && BY_CAT[r.cat]) return GROUP[BY_CAT[r.cat]];
-  return GROUPS.find(g => g.re.test(u)) || (baseCat === "kucaauto" ? GROUP.kucaauto : OTHER);
+  const g = GROUPS.find(x => x.re.test(u));
+  if (baseCat === "kucaauto" && (!g || g.id === "hemija" || g.id === "higijena")) return GROUP.kucaauto;
+  return g || OTHER;
 }
 
 // artikal na meru (kg ili litar) ili na komad

@@ -254,7 +254,11 @@ function renderOverview() {
 }
 
 /* ---------- stavke ---------- */
-function rowHtml(e) {
+function rowHtml(e, focus) {
+  // kad je izabrana kategorija, red pokazuje deo računa iz te kategorije, a ceo iznos piše ispod
+  const fp = typeof focus === "string" && e.parts.length > 1 ? e.parts.filter(p => p.cat === focus) : null;
+  const shown = fp && fp.length ? fp.reduce((a, p) => a + p.amount, 0) : e.amount;
+  const fItems = fp ? fp.flatMap(p => p.items || []).map(it => String(it.name).replace(/^\s*\d{4,8}\s+/, "").replace(/\s*\/\s*(KOM|KG|L)\s*$/i, "")) : [];
   const tags = e.parts.map(p => {
     const cls = p.cat === "prolazno" ? "pass" : p.cat === "nerazvrstano" ? "wait" : e.manual ? "man" : "";
     const extra = p.cat === "prolazno" && p.person ? " " + p.person : "";
@@ -262,12 +266,12 @@ function rowHtml(e) {
     return `<span class="tag ${cls}">${esc(catName(p.cat) + extra + part)}</span>`;
   }).join("");
   const doc = e.receipt ? `<span class="tag doc">${e.receipt.kind === "ips" ? "Uplatnica" : e.receipt.cat === "priliv" ? "Uplata" : e.receipt.kind === "manual" ? "Ručno" : "Račun"}${e.cash ? ", gotovina" : ""}</span>` : "";
-  const info = [e.label, e.fee ? "uključena konverzija " + money(-e.fee, true) : "", e.pending ? "čeka izvod" : "", e.rule && !e.manual ? "pravilo: " + e.rule.toLowerCase() : ""].filter(Boolean).join(", ");
+  const info = [fp && fp.length ? `od ukupno ${money(e.amount, true)}${fItems.length ? ": " + fItems.slice(0, 3).join(", ").toLowerCase() + (fItems.length > 3 ? ` i još ${fItems.length - 3}` : "") : ""}` : "", e.label, e.fee ? "uključena konverzija " + money(-e.fee, true) : "", e.pending ? "čeka izvod" : "", e.rule && !e.manual ? "pravilo: " + e.rule.toLowerCase() : ""].filter(Boolean).join(", ");
   const main = e.parts[0]?.cat || "nerazvrstano";
   return `<button class="trow" data-edit="${esc(e.id)}">
     <span class="tic ${main === "nerazvrstano" ? "wait" : main === "prolazno" ? "pass" : ""}">${catIcon(main, 20)}</span>
     <span class="name">${esc(e.name)}</span>
-    <span class="amt num ${e.amount > 0 ? "plus" : ""}">${signed(e.amount)}</span>
+    <span class="amt num ${shown > 0 ? "plus" : ""}">${signed(shown)}</span>
     <span class="sub">${doc}${tags}${info ? `<span class="meta dim">${esc(info)}</span>` : ""}</span>
   </button>`;
 }
@@ -284,7 +288,7 @@ function renderList() {
     ${S.cat ? `<span class="meta">Kategorija</span><button class="chip" aria-pressed="true" data-clear>${esc(catName(S.cat))} ×</button>` : ""}
     <span class="meta dim num">${stavki(L.length)}, ukupno ${signed(sum)}</span>
   </div>
-  ${Object.keys(days).map(d => `<div class="day"><div class="meta dim">${esc(dDay(d))}</div>${days[d].map(rowHtml).join("")}</div>`).join("") || `<div class="empty"><span class="meta dim">Nema stavki za ovaj izbor</span></div>`}`;
+  ${Object.keys(days).map(d => `<div class="day"><div class="meta dim">${esc(dDay(d))}</div>${days[d].map(e => rowHtml(e, S.cat)).join("")}</div>`).join("") || `<div class="empty"><span class="meta dim">Nema stavki za ovaj izbor</span></div>`}`;
   const qi = document.getElementById("q");
   qi.addEventListener("input", () => { S.q = qi.value; const pos = qi.selectionStart; renderList(); const n = document.getElementById("q"); n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) {} });
 }
