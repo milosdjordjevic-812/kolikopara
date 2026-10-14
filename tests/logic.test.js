@@ -112,3 +112,9 @@ test("uradi sam: ceo račun je kuća i auto, cigarete i dalje idu u cigarete", a
   assert.equal(-T2.by.cigarete.sum, 520);
   assert.equal(-T2.by.kucaauto.sum, 8359);
 });
+
+test("Polar (prodavac softvera) je pretplata, benzinska stanica je pumpa", async () => {
+  const { merchantCat } = await import("../src/logic.js");
+  assert.equal(merchantCat([], "POLAR* DETAILS-SO +13479730671 US", -4333.38).cat, "pretplate");
+  assert.equal(merchantCat([], "Benzinska stanica BS2 BEOGRAD RS", -2999.43).cat, "pumpa");
+});
