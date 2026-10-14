@@ -138,7 +138,7 @@ function render() {
   v();
 }
 function header() {
-  return `<div class="top"><div class="logo">[kolko para?]</div><div class="topr"><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više", korpa: "Korpa", dan: "Po danu" })[S.view] || "")}</span>${avaBtn()}</div></div>${installHint()}`;
+  return `<div class="top"><div class="logo">[kolko para?]</div><div class="topr"><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više", korpa: "Korpa", dan: "Stavke" })[S.view] || "")}</span>${avaBtn()}</div></div>${installHint()}`;
 }
 function tabbar(show) {
   let bar = document.querySelector(".tabbar");
@@ -592,14 +592,13 @@ async function saveCrop() {
 }
 
 /* ---------- po danu: šta je kupljeno tog dana ---------- */
+// datum sa strelicama levo i desno; dodir na datum otvara kalendar telefona
 function dayPicker(d) {
-  const td = today(), yd = dstrBack(td, 1);
-  return `<div class="periods daypick">
-    ${d ? `<button class="chip" data-dstep="-1" aria-label="Dan ranije">‹</button>` : `<span class="meta">Po danu</span>`}
-    <button class="chip" data-day="0" aria-pressed="${d === td}">Danas</button>
-    <button class="chip" data-day="1" aria-pressed="${d === yd}">Juče</button>
-    <label class="chip datechip" aria-pressed="${!!d && d !== td && d !== yd}">${d && d !== td && d !== yd ? esc(dShort(d) + d.slice(0, 4)) : "Izaberi datum"}<input type="date" id="day-in" max="${td}" value="${esc(d || td)}" aria-label="Izaberi datum"></label>
-    ${d ? `<button class="chip" data-dstep="1" aria-label="Dan kasnije" ${d >= td ? "disabled" : ""}>›</button>` : ""}
+  const td = today(), cur = d || td;
+  return `<div class="daypick">
+    <button class="dstep" data-dstep="-1" aria-label="Dan ranije">‹</button>
+    <label class="datechip">${esc(dDay(cur))}<input type="date" id="day-in" max="${td}" value="${esc(cur)}" aria-label="Izaberi datum"></label>
+    <button class="dstep" data-dstep="1" aria-label="Dan kasnije" ${cur >= td ? "disabled" : ""}>›</button>
   </div>`;
 }
 function bindDayInput() {
@@ -614,7 +613,6 @@ function renderDay() {
   const lb = lastBank();
   const cats = CATS.filter(c => c.kind === "spend" && T.by[c.id] && -T.by[c.id].sum > 0.004).map(c => ({ c, sum: -T.by[c.id].sum })).sort((a, b) => b.sum - a.sum);
   app.innerHTML = `${header()}
-  <div class="hero"><div><span class="eyebrow">[${esc(dDay(d))}]</span></div><h1>${d === td ? "Danas" : d === yd ? "Juče" : esc(dShort(d))}</h1></div>
   ${dayPicker(d)}
   <div class="tiles" style="margin-top:20px">
     <div class="tile"><span class="meta dim">Potrošeno</span><span class="v num">${money(T.spend)}</span><span class="meta dim">${buys.length} ${buys.length % 10 === 1 && buys.length % 100 !== 11 ? "kupovina" : "kupovine"}${items ? `, ${stavki(items).replace("stavk", "artik").replace("artika", "artikla").replace("artiki", "artikala")}` : ""}</span></div>
@@ -1422,7 +1420,7 @@ app.addEventListener("click", async ev => {
   if (t.closest("[data-goal]")) { openGoal(); return; }
   if (t.closest("[data-plan]")) { openPlan(); return; }
   const dy = t.closest("[data-day]"); if (dy) { S.day = dstrBack(today(), +dy.dataset.day); S.view = "dan"; render(); window.scrollTo(0, 0); return; }
-  const dsp = t.closest("[data-dstep]"); if (dsp) { const n = dstrBack(S.day || today(), -dsp.dataset.dstep); S.day = n > today() ? today() : n; render(); return; }
+  const dsp = t.closest("[data-dstep]"); if (dsp) { const base = S.view === "dan" ? S.day || today() : today(); const n = dstrBack(base, -dsp.dataset.dstep); S.day = n > today() ? today() : n; S.view = "dan"; render(); return; }
   const av = t.closest("[data-avg]"); if (av) { setAvg(av.dataset.avg); const y = window.scrollY; render(); window.scrollTo(0, y); return; }
   const kp = t.closest("[data-kper]"); if (kp) { S.kper = kp.dataset.kper; S.kopen = null; render(); return; }
   const kg = t.closest("[data-kgrp]"); if (kg) { S.kopen = S.kopen === kg.dataset.kgrp ? null : kg.dataset.kgrp; const y = window.scrollY; render(); window.scrollTo(0, y); return; }
