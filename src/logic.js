@@ -35,6 +35,9 @@ export const META_CATS = new Set(["stanje", "profil", "cilj", "plan"]);
 export const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 export const catName = id => (CAT[id] || CAT.nerazvrstano).name;
 
+// alkohol: reči i marke koje se viđaju na računima (pivo, vino, žestina)
+export const ALCO_RE = /\bPIVO\b|\bBEER\b|\bBIRR?A\b|\bVINO\b|\bWINE\b|RAKIJA|VOTKA|VODKA|VISKI|WHISK|JAGERMEISTER|J[ÄA]GER|\bGIN\b|\bRUM\b|\bJELEN\b|ZAJE[ČC]ARSKO|HEINEKEN|TUBORG|CARLSBERG|STELLA ARTOIS|NIKSI[ČC]KO|\bLAV\b|AMSTEL|BUDWEISER|CORONA|PERONI|MORR?ETT?I|MADR[IÌ]\b|STAROPRAMEN|PILSNER|KOZEL|KRU[ŠS]OVICE|LA[ŠS]KO|\bUNION\b|ERDINGER|PAULANER|BECK'?S|GRIMBERGEN|LEFFE|HOEGAARDEN|KRONENBOURG|SOMERSBY|APEROL|PELINKOVAC|VERMUT|LIKER|SPRITZ|TAMBURA[ŠS]|BOGDAN|ALEKSI[ĆC]|RADOVANOVI[ĆC]|KOVA[ČC]EVI[ĆC]|TIKVE[ŠS]|VRANAC|PLANTA[ŽZ]E|\bRUBIN\b|CHARDONN?AY|MERLOT|CABERNET|SAUVIGNON|RIZLING|RIESLING|[ŽZ]ILAVKA|PROKUPAC|TAMJANIKA|ROSE\b|ROZE\b|PROSECCO|ŠAMPANJ|SAMPANJ|SPUMANTE|[ŽZ]UTI CVET/;
+
 const MERCHANT = [
   ["interno",   /MILO[SŠ] [ĐD]?J?OR[ĐD]?J?EVI[CĆ] PR|MILO[SŠ] \?OR\?EVIC PR|MENJA[CČ]NICA|SMART ATM - UPLATA|TRAJNI N/],
   ["provizije", /PROVIZIJ|UPIT STANJA|NAPLATA DOSPELIH|PREMIJE OSIGURANJA|OSIGURANJE - PAKET/],
@@ -56,8 +59,8 @@ const ITEM = [
   ["cigarete", /MARLBORO|ROTHMANS|WINSTON|\bLD\b|CAMEL|PALL MALL|DAVIDOFF|CHESTERFIELD|PARLIAMENT|\bVOGUE\b|\bKENT\b|DUNHILL|LUCKY STRIKE|\bWEST\b|MORAVA|\bDRINA\b|CIGARE|IQOS|HEETS|TEREA|\bGLO\b|NEO STIK|DUVAN|TOBACCO|ELF ?BAR|VAPE|E-CIG|FILTER CIG|RIZLE/],
   ["gorivo",   /\bBMB\b|EVRO ?DIZEL|EURO ?DIESEL|\bDIZEL\b|DIESEL|G-DRIVE|BENZIN|\bTNG\b|AUTOGAS|AUTO GAS|\bLPG\b|MAXX ?MOTION|ADBLUE|EN ?590|\bEVRO ?PREMIUM\b/],
   ["kucaauto", /DR[ŽZ]A[ČC] ZA|[ŠS]RAF|\bTIPL|EKSER|SIJALIC|SILIKON|BATERIJA ZA (SUDOP|TU[ŠS]|LAVAB|KAD)|SLAVIN|BRISA[ČC] STAKLA|ANTIFRIZ|MOTORNO ULJE|TE[ČC]NOST ZA BRISA/],
-  ["hemija",   /DETERD[ŽZ]|\bDET\.|\bARIEL\b|PERSIL|\bBONUX\b|OMEKSIVA[CČ]|\bLENOR\b|\bDUEL\b|\bFAIRY\b|PRONTO|DOMESTOS|\bSAVO\b|\bARF\b|\bCIF\b|\bBREF\b|TOALET|\bWC\b|UBRUS|MARAMIC|MARAMIČ|SUN[ĐD]ER|SUNDJER|\bKRPA|VLA[ŽZ]\.? ?MAR|SAPUN|[ŠS]AMPON|GEL ZA TU[ŠS]|PASTA ZA ZUBE|COLGATE|[ČC]ETKICA|DEZODOR|\bDEO\b|NIVEA|BRIJA[ČC]|GILLETTE|PELENE|ULO[ŠS]CI|ULO[ŠS]AK|TAMPON|\bVATA\b|KESE ZA SME|SREDSTVO ZA/],
-  ["alkohol",  /\bPIVO\b|\bBEER\b|\bVINO\b|\bWINE\b|RAKIJA|VOTKA|VODKA|VISKI|WHISK|JAGERMEISTER|J[ÄA]GER|\bGIN\b|\bRUM\b|\bJELEN\b|ZAJE[ČC]ARSKO|HEINEKEN|TUBORG|CARLSBERG|STELLA ARTOIS|NIKSI[ČC]KO|\bLAV PIVO/],
+  ["hemija",   /\bT\.? ?PAPIR|TOAL\.? ?PAP|DETERD[ŽZ]|\bDET\.|\bARIEL\b|PERSIL|\bBONUX\b|OMEKSIVA[CČ]|\bLENOR\b|\bDUEL\b|\bFAIRY\b|PRONTO|DOMESTOS|\bSAVO\b|\bARF\b|\bCIF\b|\bBREF\b|TOALET|\bWC\b|UBRUS|MARAMIC|MARAMIČ|SUN[ĐD]ER|SUNDJER|\bKRPA|VLA[ŽZ]\.? ?MAR|SAPUN|[ŠS]AMPON|GEL ZA TU[ŠS]|PASTA ZA ZUBE|COLGATE|[ČC]ETKICA|DEZODOR|\bDEO\b|NIVEA|BRIJA[ČC]|GILLETTE|PELENE|ULO[ŠS]CI|ULO[ŠS]AK|TAMPON|\bVATA\b|KESE ZA SME|SREDSTVO ZA/],
+  ["alkohol",  ALCO_RE],
 ];
 
 export const upper = s => latin(s).toUpperCase();
@@ -221,7 +224,8 @@ function itemParts(rules, items, amount, base, sign) {
     const ic = itemCat(rules, it.name);
     // u radnji za kuću i auto sve je kuća i auto (držač za toalet papir nije kućna hemija),
     // osim cigareta, alkohola i goriva, i osim tvog pravila za artikal
-    const keep = base === "kucaauto" && ic && !ic.rule && !STRONG.has(ic.cat);
+    // u kafiću je i piće iz kafića izlazak (osim cigareta)
+    const keep = ic && !ic.rule && ((base === "kucaauto" && !STRONG.has(ic.cat)) || (base === "izlasci" && ic.cat !== "cigarete"));
     const cat = ic && !keep ? ic.cat : base;
     const val = sign * Math.abs(it.total);
     covered += val;

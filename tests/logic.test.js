@@ -118,3 +118,16 @@ test("Polar (prodavac softvera) je pretplata, benzinska stanica je pumpa", async
   assert.equal(merchantCat([], "POLAR* DETAILS-SO +13479730671 US", -4333.38).cat, "pretplate");
   assert.equal(merchantCat([], "Benzinska stanica BS2 BEOGRAD RS", -2999.43).cat, "pumpa");
 });
+
+test("kafić: piće ostaje izlazak, pivo kupljeno na pumpi ide u alkohol", async () => {
+  const { derive, totals } = await import("../src/logic.js");
+  const r = (id, merchant, items, total) => ({ id, kind: "fiscal", merchant, store: merchant, total, issued_at: "2026-10-13T20:00:00", payment: "kartica", items });
+  const T = totals(derive({ tx: [], receipts: [
+    r("k", "ZABAC CAFFE SESTICA", [{ name: "Aleksic Zuti Cvet 0,187", qty: 1, total: 450 }, { name: "Madri 0.5", qty: 1, total: 445 }], 895),
+    r("p", "MOL SERBIA SES MIRIJEVO", [{ name: "Birra Morreti 0.5l CAN", qty: 1, total: 149.99 }, { name: "Z.Bogdan 8 tamburasa 0.75l", qty: 1, total: 1679 }, { name: "MARLBORO GOLD", qty: 1, total: 520 }], 2348.99),
+  ] }));
+  assert.equal(-T.by.izlasci.sum, 895);
+  assert.equal(-T.by.alkohol.sum, 1828.99);
+  assert.equal(-T.by.cigarete.sum, 520);
+  assert.equal(T.by.pumpa, undefined);
+});

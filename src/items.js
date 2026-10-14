@@ -1,7 +1,7 @@
 // Korpa: šta je kupljeno, po vrstama artikala, sa svih računa. Bez DOM-a, da može da se testira.
 // Vrsta artikla je odvojena od kategorije troška: voda kupljena na pumpi je i dalje "voda i sokovi",
 // a trošak ostaje "na pumpi". Cigarete, alkohol, gorivo i hemija menjaju i kategoriju (vidi ITEM u logic.js).
-import { upper, itemCat, storeName } from "./logic.js";
+import { upper, itemCat, storeName, ALCO_RE } from "./logic.js";
 
 // redosled je važan: prvo ono što bi se pomešalo (tečni sapun "med mleko" je hemija, ne mleko)
 export const GROUPS = [
@@ -12,17 +12,17 @@ export const GROUPS = [
   { id: "kucaauto", name: "Kuća i auto, materijal", icon: "kucaauto",
     re: /DR[ŽZ]A[ČC]|NOSA[ČC]|KUKIC|\bKUKA\b|[ŠS]RAF|\bTIPL|EKSER|VIJAK|SIJALIC|LED ?SIJ|SILIKON|BATERIJA ZA (SUDOP|TU[ŠS]|LAVAB|KAD)|SLAVIN|SIFON|BRISA[ČC]|METLIC[EA] BRIS|[ČC]ISTA[ČC] STAKLA \d|RUKAVICE|PRODU[ŽZ]N|\bKABL|UTI[ČC]NIC|PREKIDA[ČC]|LEPAK|LEPLJIV|IZOLIR|\bTRAKA\b|FARBA|BOJA ZA (ZID|DRVO|METAL)|VALJAK|[ČC]ETKA ZA|[ŠS]MIRGL|ODVIJA[ČC]|KLE[ŠS]TA|[ČC]EKI[ĆC]|BURGIJ|MERDEVIN|OTIRA[ČC]|\bKANTA|\bCREVO|ANTIFRIZ|MOTORNO ULJE|ULJE ZA MOTOR|TE[ČC]NOST ZA (STAKLA|BRISA)|OSIGURA[ČC]|\bALAT|KATANAC|\bBRAVA|CILINDAR|ZAPTIV|ŠARKA|SARKA/ },
   { id: "hemija", name: "Deterdžent i kućna hemija", icon: "hemija",
-    re: /DETERD[ŽZ]|\bDET\.|\bARIEL\b|PERSIL|\bBONUX\b|OMEKSIVA[CČ]|\bLENOR\b|\bDUEL\b|\bFAIRY\b|PRONTO|DOMESTOS|\bSAVO\b|\bARF\b|\bCIF\b|\bBREF\b|TOALET|\bWC\b|UBRUS|SUN[ĐD]ER|SUNDJER|\bKRPA|KESE ZA SME|SREDSTVO ZA/ },
+    re: /DETERD[ŽZ]|\bDET\.|\bARIEL\b|PERSIL|\bBONUX\b|OMEKSIVA[CČ]|\bLENOR\b|\bDUEL\b|\bFAIRY\b|PRONTO|DOMESTOS|\bSAVO\b|\bARF\b|\bCIF\b|\bBREF\b|TOALET (GEL|SREDSTVO|BLOK|OSVE)|WC (GEL|SREDSTVO|BLOK|OSVE)|UBRUS|SUN[ĐD]ER|SUNDJER|\bKRPA|KESE ZA SME|SREDSTVO ZA/ },
   { id: "higijena", name: "Higijena i kozmetika", icon: "apoteka",
-    re: /MARAMIC|MARAMIČ|VLA[ŽZ]\.? ?MAR|SAPUN|[ŠS]AMPON|GEL ZA TU[ŠS]|PASTA ZA ZUBE|COLGATE|[ČC]ETKICA|DEZODOR|\bDEO\b|NIVEA|BRIJA[ČC]|GILLETTE|PELENE|ULO[ŠS]CI|ULO[ŠS]AK|TAMPON|\bVATA\b|KREMA ZA|LOSION/ },
+    re: /\bT\.? ?PAPIR|TOAL\.? ?PAP|TOALET ?PAP|PAPIRNE? MARAM|SALVET|MARAMIC|MARAMIČ|VLA[ŽZ]\.? ?MAR|SAPUN|[ŠS]AMPON|GEL ZA TU[ŠS]|PASTA ZA ZUBE|COLGATE|[ČC]ETKICA|DEZODOR|\bDEO\b|NIVEA|BRIJA[ČC]|GILLETTE|PELENE|ULO[ŠS]CI|ULO[ŠS]AK|TAMPON|\bVATA\b|KREMA ZA|LOSION/ },
   { id: "alkohol", name: "Pivo, vino i žestina", icon: "alkohol",
-    re: /\bPIVO\b|\bBEER\b|\bVINO\b|\bWINE\b|RAKIJA|VOTKA|VODKA|VISKI|WHISK|JAGERMEISTER|J[ÄA]GER|\bGIN\b|\bRUM\b|\bJELEN\b|ZAJE[ČC]ARSKO|HEINEKEN|TUBORG|CARLSBERG|STELLA ARTOIS|NIKSI[ČC]KO|\bLAV\b|AMSTEL|BUDWEISER|CORONA|APEROL|PELINKOVAC|VERMUT|LIKER|SPRITZ/ },
+    re: ALCO_RE },
   { id: "slatkisi", name: "Slatkiši i grickalice", icon: "slatkis",
     re: /[ČC]OKOL|CHOCO|MILKA|KINDER|NUTELLA|SNICKERS|\bMARS\b|TWIX|BOUNTY|KIT ?KAT|BANANICA|NAPOLITANK|KEKS|BISKVIT|PLAZMA|JAFFA|SMOKI|[ČC]IPS|CHIPS|PRINGLES|FLIPS|KIKIRIKI|BOMBON|[ŽZ]VAK|ORBIT|SLADOLED|TORTA|KOLA[ČC]|VAFL|WAFFL|GUMENE|LIZALICA|RONDO|MENTOS|TIC ?TAC|STARK|SWISSLION|PRALIN/ },
   { id: "pice", name: "Voda, sokovi i kafa", icon: "pice",
     re: /VODA|\bROSA\b|KNJAZ|MINERAL|\bSOK\b|NEKTAR|COCA|\bCOLA\b|PEPSI|FANTA|SPRITE|SCHWEPPES|ENERGET|RED ?BULL|MONSTER|GUARANA|NESTEA|LEDENI [ČC]AJ|\bKAFA\b|COFFEE|ESPRESSO|NESCAFE|CAPPUCC|\b[ČC]AJ\b|LIMUNADA/ },
   { id: "meso", name: "Meso, riba i delikates", icon: "meso",
-    re: /\bMESO|ME[ŠS]ANO|MLEVEN|\bPILE|PILE[ĆC]|PILET|[ĆC]URE|SVINJ|JUNE[ĆCT]|TELE[ĆCT]|KOBAS|SALAM|[ŠS]UNK|PR[ŠS]UT|SLANIN|PE[ČC]ENIC|HRENOV|PA[ŠS]TET|\bRIBA|TUNJ|LOSOS|[ŠS]KUS|DELIKATES|[ĆC]EVAP|PLJESKAV|KARABATAK|BATAK|FILE\b/ },
+    re: /\bPIL\.|GRUDI|NEOPLANTA|CARNEX|YUHOR|MATIJEVI[ĆC]|ZLATIBORAC|PERUTNINA|\bMESO|ME[ŠS]ANO|MLEVEN|\bPILE|PILE[ĆC]|PILET|[ĆC]URE|SVINJ|JUNE[ĆCT]|TELE[ĆCT]|KOBAS|SALAM|[ŠS]UNK|PR[ŠS]UT|SLANIN|PE[ČC]ENIC|HRENOV|PA[ŠS]TET|\bRIBA|TUNJ|LOSOS|[ŠS]KUS|DELIKATES|[ĆC]EVAP|PLJESKAV|KARABATAK|BATAK|FILE\b/ },
   { id: "mlecni", name: "Mleko, sir i jaja", icon: "mlecni",
     re: /MLEKO|MLE[ČC]N|JOGURT|KISELO|PAVLAK|\bSIR\b|MOCAREL|MOZZAREL|KAJMAK|MASLAC|PUTER|\bJAJA\b|KEFIR|GAUDA|TRAPIST|EDAMER|FETA|GR[ČC]KI|SKYR|PUDING/ },
   { id: "voce", name: "Voće i povrće", icon: "voce",
@@ -35,6 +35,8 @@ export const GROUPS = [
 ];
 export const GROUP = Object.fromEntries(GROUPS.map(g => [g.id, g]));
 const OTHER = { id: "ostalo", name: "Ostalo sa računa", icon: "ostalo" };
+// sve sa računa iz kafića (piće, hrana) je izlazak, osim cigareta
+const CAFE = { id: "izlasci", name: "Kafić i izlazak", icon: "izlasci" };
 
 // korisnikovo pravilo za artikal ima prednost, pa reči iz naziva; artikal koji se ne prepozna
 // a kupljen je u radnji za kuću i auto ide u tu grupu
@@ -45,6 +47,7 @@ export function itemGroup(name, rules = [], baseCat = "") {
   if (r && r.rule && BY_CAT[r.cat]) return GROUP[BY_CAT[r.cat]];
   const g = GROUPS.find(x => x.re.test(u));
   if (baseCat === "kucaauto" && (!g || g.id === "hemija" || g.id === "higijena")) return GROUP.kucaauto;
+  if (baseCat === "izlasci" && (!g || g.id !== "cigarete")) return CAFE;
   return g || OTHER;
 }
 

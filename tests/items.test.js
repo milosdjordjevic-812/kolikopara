@@ -76,3 +76,14 @@ test("pravilo za artikal određuje grupu", () => {
   const rules = [{ kind: "item", match: "ROTOR", cat: "kucaauto" }];
   assert.equal(itemGroup("ROTOR 3000", rules).id, "kucaauto");
 });
+
+test("artikli sa pravih računa: vino, pivo, toalet papir, piletina; kafić je izlazak", () => {
+  assert.equal(itemGroup("Z.Bogdan 8 tamburasa 0.75l").id, "alkohol");
+  assert.equal(itemGroup("Birra Morreti 0.5l CAN").id, "alkohol");
+  assert.equal(itemGroup("T.papir Maxi 10 1 3sl").id, "higijena");
+  assert.equal(itemGroup("Pil.grudi mini Neoplanta 330g").id, "meso");
+  assert.equal(itemGroup("Aleksic Zuti Cvet 0,187", [], "izlasci").id, "izlasci");
+  assert.equal(itemGroup("Madri 0.5", [], "izlasci").id, "izlasci");
+  assert.equal(itemGroup("MARLBORO GOLD", [], "izlasci").id, "cigarete");
+  assert.equal(itemGroup("BREF WC GEL").id, "hemija");
+});
