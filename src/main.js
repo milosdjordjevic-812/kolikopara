@@ -1243,8 +1243,8 @@ function drawManual() {
     </div>
     ${st.income ? drawIncomeFields(st) : `<h3>Trošak bez računa</h3>
     <div class="map">
-      <label class="field"><span class="meta">Na šta ili gde</span><input id="m-desc" value="${esc(st.desc)}" placeholder="npr. pijaca, frizer"></label>
-      <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="${isum ? amtStr(isum) : "0"}"></label>
+      <div class="field"><label class="meta" for="m-desc">Na šta ili gde</label><input id="m-desc" value="${esc(st.desc)}" placeholder="npr. pijaca, frizer" autocomplete="off"><div class="sugg" id="m-sugg"></div></div>
+      <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="${isum ? amtStr(isum) : st.lastAmt ? "prošli put " + amtStr(st.lastAmt) : "0"}"></label>
       <label class="field"><span class="meta">Datum</span><input id="m-date" type="date" value="${esc(st.date)}"></label>
     </div>
     <div class="field"><span class="meta">Artikli, da ih Korpa broji (nije obavezno)</span>
@@ -1267,8 +1267,8 @@ function drawManual() {
 function drawIncomeFields(st) {
   return `<h3>Uplata</h3>
     <div class="map">
-      <label class="field"><span class="meta">Od koga</span><input id="m-desc" list="m-from" value="${esc(st.desc)}" placeholder="npr. Hristijan" autocomplete="off"><datalist id="m-from">${incomeNames().map(n => `<option value="${esc(n)}">`).join("")}</datalist></label>
-      <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="0"></label>
+      <div class="field"><label class="meta" for="m-desc">Od koga</label><input id="m-desc" value="${esc(st.desc)}" placeholder="npr. Hristijan" autocomplete="off"><div class="sugg" id="m-sugg"></div></div>
+      <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="${st.lastAmt ? "prošli put " + amtStr(st.lastAmt) : "0"}"></label>
       <label class="field"><span class="meta">Datum</span><input id="m-date" type="date" value="${esc(st.date)}"></label>
     </div>
     <div class="field"><span class="meta">Čiji je novac</span><div class="catgrid"><button class="chip" data-mpass="0" aria-pressed="${!st.pass}">Moj</button><button class="chip" data-mpass="1" aria-pressed="${!!st.pass}">Prolazno, nije moj</button></div></div>
@@ -1283,6 +1283,42 @@ function readManual() {
   if (g("m-say")) st.said = g("m-say").value;
   layer.querySelectorAll("[data-mname]").forEach(el => { const it = st.items[+el.dataset.mname]; if (it) it.name = el.value.trim(); });
   layer.querySelectorAll("[data-mamt]").forEach(el => { const it = st.items[+el.dataset.mamt]; if (it) it.total = el.value.trim(); });
+}
+// predlozi dok kucaš: ranije ručno upisani troškovi (ili uplate), najčešći i najskoriji prvi
+const fold = t => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "dj").trim();
+function manualHistory(income) {
+  const m = new Map();
+  for (const r of S.data.receipts) {
+    if (r.kind !== "manual" || META_CATS.has(r.cat) || r.cat === "stednja" || !!r.refund !== !!income) continue;
+    const name = String(r.merchant || "").trim(); if (!name) continue;
+    const k = fold(name), at = String(r.issued_at || "") + String(r.created_at || "");
+    const x = m.get(k) || { n: 0, last: "" };
+    x.n++;
+    if (at >= x.last) Object.assign(x, { last: at, name, cat: r.cat, payment: r.payment, amount: Number(r.total) || 0, person: r.person || "" });
+    m.set(k, x);
+  }
+  return [...m.values()];
+}
+function suggest(q, income) {
+  const f = fold(q), all = manualHistory(income);
+  const score = x => { const n = fold(x.name); if (!f) return 1; if (n === f) return 0; if (n.startsWith(f)) return 3; if (n.split(/[\s,.\-]+/).some(w => w.startsWith(f))) return 2; return n.includes(f) ? 1 : 0; };
+  return all.map(x => ({ x, s: score(x) })).filter(o => o.s > 0).sort((a, b) => b.s - a.s || b.x.n - a.x.n || (a.x.last < b.x.last ? 1 : -1)).slice(0, 4).map(o => o.x);
+}
+function showSugg() {
+  const st = S.sheet, box = document.getElementById("m-sugg"), inp = document.getElementById("m-desc");
+  if (!st || st.kind !== "manual" || !box || !inp) return;
+  st.sugg = suggest(inp.value, st.income);
+  box.innerHTML = st.sugg.map((x, i) => `<button type="button" class="chip" data-sugg="${i}">${esc(x.name)}${x.amount ? `<span class="dim"> ${money(x.amount)}</span>` : ""}</button>`).join("");
+}
+function pickSugg(i) {
+  const st = S.sheet, x = st.sugg && st.sugg[i]; if (!x) return;
+  readManual();
+  st.desc = x.name; st.lastAmt = x.amount;
+  if (st.income) { st.pass = x.cat === "prolazno"; if (st.pass) st.person = x.person; if (x.payment) st.payment = x.payment; }
+  else { if (st.cat === "nerazvrstano" || !st.cat) st.cat = x.cat; if (x.cat === "prolazno") st.person = x.person; if (x.payment) st.payment = x.payment; }
+  st.sugg = [];
+  redrawKeep();
+  document.getElementById("m-amt")?.focus();
 }
 const redrawKeep = () => { const sh = layer.querySelector(".sheet"), y = sh ? sh.scrollTop : 0; drawSheet(); const n = layer.querySelector(".sheet"); if (n) n.scrollTop = y; };
 
@@ -1466,6 +1502,7 @@ layer.addEventListener("click", ev => {
   if (t.closest("[data-gdel]")) { saveGoal(true); return; }
   if (st.kind === "manual") {
     if (t.closest("[data-mvoice]")) { toggleVoice(); return; }
+    const sg = t.closest("[data-sugg]"); if (sg) { pickSugg(+sg.dataset.sugg); return; }
     const mps = t.closest("[data-mpass]"); if (mps) { readManual(); st.pass = mps.dataset.mpass === "1"; redrawKeep(); return; }
     if (t.closest("[data-madd]")) { readManual(); st.items.push({ name: "", total: "", qty: 1 }); redrawKeep(); const ins = layer.querySelectorAll("[data-mname]"); if (ins.length) ins[ins.length - 1].focus(); return; }
     const md = t.closest("[data-mdel]"); if (md) { readManual(); st.items.splice(+md.dataset.mdel, 1); redrawKeep(); return; }
@@ -1490,6 +1527,8 @@ layer.addEventListener("click", ev => {
   const ei = t.closest("[data-edit-in]"); if (ei) { openEdit(ei.dataset.editIn); return; }
   const mm = t.closest("[data-mmode]"); if (mm) { readManual(); st.income = mm.dataset.mmode === "in"; st.payment = st.income ? "racun" : "gotovina"; drawSheet(); return; }
 });
+layer.addEventListener("input", ev => { if (ev.target.id === "m-desc") showSugg(); });
+layer.addEventListener("focusin", ev => { if (ev.target.id === "m-desc") showSugg(); });
 layer.addEventListener("change", ev => {
   // rečenica iz polja (napisana ili izdiktirana tastaturom) popuni ostala polja
   if (ev.target.id === "m-say" && S.sheet?.kind === "manual") { readManual(); if (S.sheet.said.trim()) { applySaid(S.sheet.said.trim()); redrawKeep(); } return; }
