@@ -4,6 +4,7 @@ import { latin } from "./shared/fiscal.js";
 export const CATS = [
   { id: "market",       name: "Market i namirnice",  kind: "spend" },
   { id: "pijaca",       name: "Pijaca",              kind: "spend" },
+  { id: "pekara",       name: "Pekara",              kind: "spend" },
   { id: "dostava",      name: "Dostava hrane",       kind: "spend" },
   { id: "izlasci",      name: "Kafići i izlasci",    kind: "spend" },
   { id: "cigarete",     name: "Cigarete",            kind: "spend" },
@@ -46,6 +47,7 @@ const MERCHANT = [
   ["pretplate", /ADOBE|APPLE\.COM|OPENAI|MIDJOURNEY|GOOGLE|FORMIA|SPOTIFY|NETFLIX|FIGMA|NOTION|DROPBOX|POLAR\*|PADDLE|LEMON ?SQUEEZY|DETAILS[ -.]SO/],
   ["racuni",    /YETTEL|A1 SRBIJA|TELEKOM|\bMTS\b|\bSBB\b|\bEPS\b|ELEKTROPRIVREDA|INFOSTAN|BEOGRADSKE ELEKTRANE|VODOVOD/],
   ["market",    /UNIVEREXPORT|MAXI|C MARKET|LIDL|SVEZE VOCE|SVEŽE VOĆE|THE PIJAC|AMAN DOO|\bIDEA\b|TEMPO|RODA|PERSPEKTIVA|DELHAIZE|MERCATOR/],
+  ["pekara",    /PEKAR|BAKERY|HLEB I KIFLE|MLINAR|KIFLICA|PECIVA|BUREKD[ŽZ]IJ|BURE[ĆC]ARA|[ŠS]TRUDLA/],
   ["pijaca",    /\bPIJAC[AEIU]?\b|ZELENI VENAC|KALENI[ĆC]|BAJLONI|PILJAR/],
   ["izlasci",   /ZABAC|ŽABAC|BAR ZA|PIZZ|KAFE|CAFFE|KESTEN|ARGUMENT|HVALA TIP|RESTORAN/],
   ["kucaauto",  /BAUHAUS|MERKUR|MR ?BRICOLAGE|PEVEX|URADI SAM|\bOBI\b|JYSK|AUTO ?DELOVI|AUTODELOVI|AUTO ?CENTAR|VULKANIZ|AUTO ?SERVIS|TEHNI[CČ]KI PREGLED|AUTO ?PERIONICA|PERIONICA|GVO[ŽZ][ĐD]AR|BOJE I LAKOVI|ELEKTRO ?MATERIJAL/],

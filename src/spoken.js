@@ -127,7 +127,8 @@ export function guessCat(r, rules = []) {
   if (r.income) return "priliv";
   const d = plain(r.desc);
   if (/^pijac/.test(d)) return "pijaca";
-  if (/^(pekar|piljar|mesar)/.test(d)) return "market";
+  if (/^pekar/.test(d)) return "pekara";
+  if (/^(piljar|mesar)/.test(d)) return "market";
   if (/^trafik/.test(d)) return r.items.length && r.items.every(i => itemGroup(i.name).id === "cigarete") ? "cigarete" : "kupovina";
   if (/^(kafic|kafa)/.test(d)) return "izlasci";
   if (/^frizer/.test(d)) return "ostalo";

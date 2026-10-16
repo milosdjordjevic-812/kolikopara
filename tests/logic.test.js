@@ -131,3 +131,12 @@ test("kafić: piće ostaje izlazak, pivo kupljeno na pumpi ide u alkohol", async
   assert.equal(-T.by.cigarete.sum, 520);
   assert.equal(T.by.pumpa, undefined);
 });
+
+test("pekara je posebna kategorija", async () => {
+  const { merchantCat, CATS } = await import("../src/logic.js");
+  const { parseSpoken } = await import("../src/spoken.js");
+  assert.ok(CATS.some(c => c.id === "pekara"));
+  assert.equal(merchantCat([], "PEKARA TOMA MIRIJEVO BEOGRAD", -250).cat, "pekara");
+  assert.equal(merchantCat([], "HLEB I KIFLE 112 BEOGRAD", -180).cat, "pekara");
+  assert.equal(parseSpoken("pekara burek 250").cat, "pekara");
+});
