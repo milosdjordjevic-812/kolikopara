@@ -131,7 +131,7 @@ export function guessCat(r, rules = []) {
   if (/^(piljar|mesar)/.test(d)) return "market";
   if (/^trafik/.test(d)) return r.items.length && r.items.every(i => itemGroup(i.name).id === "cigarete") ? "cigarete" : "kupovina";
   if (/^(kafic|kafa)/.test(d)) return "izlasci";
-  if (/^frizer/.test(d)) return "ostalo";
+  if (/^frizer/.test(d)) return "zasebe";
   const m = merchantCat(rules, r.desc, -1).cat;
   if (m !== "nerazvrstano") return m;
   if (r.items.length && r.items.every(i => FOOD.has(itemGroup(i.name).id))) return "market";

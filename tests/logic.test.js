@@ -140,3 +140,13 @@ test("pekara je posebna kategorija", async () => {
   assert.equal(merchantCat([], "HLEB I KIFLE 112 BEOGRAD", -180).cat, "pekara");
   assert.equal(parseSpoken("pekara burek 250").cat, "pekara");
 });
+
+test("putarina, teretana i za sebe", async () => {
+  const { merchantCat, CATS } = await import("../src/logic.js");
+  for (const id of ["putarina", "teretana", "zasebe"]) assert.ok(CATS.some(c => c.id === id), id);
+  assert.equal(merchantCat([], "PUTEVI SRBIJE NAPLATA", -340).cat, "putarina");
+  assert.equal(merchantCat([], "POWER GYM BEOGRAD", -4000).cat, "teretana");
+  assert.equal(merchantCat([], "OPTIKA KESIC BEOGRAD", -12000).cat, "zasebe");
+  assert.equal(merchantCat([], "ZARA DOO BEOGRAD", -5990).cat, "zasebe");
+  assert.equal(merchantCat([], "MAXI 451 MIRIJEVO", -500).cat, "market");
+});
