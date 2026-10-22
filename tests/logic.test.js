@@ -150,3 +150,12 @@ test("putarina, teretana i za sebe", async () => {
   assert.equal(merchantCat([], "ZARA DOO BEOGRAD", -5990).cat, "zasebe");
   assert.equal(merchantCat([], "MAXI 451 MIRIJEVO", -500).cat, "market");
 });
+
+test("lekar i pregledi", async () => {
+  const { merchantCat, CATS } = await import("../src/logic.js");
+  assert.ok(CATS.some(c => c.id === "lekar"));
+  assert.equal(merchantCat([], "POLIKLINIKA MEDIGROUP BEOGRAD", -6000).cat, "lekar");
+  assert.equal(merchantCat([], "BEO-LAB LABORATORIJE", -3200).cat, "lekar");
+  assert.equal(merchantCat([], "STOMATOLOSKA ORDINACIJA DR PETROVIC", -4500).cat, "lekar");
+  assert.equal(merchantCat([], "APOTEKA BENU", -800).cat, "apoteka");
+});
