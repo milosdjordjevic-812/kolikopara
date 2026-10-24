@@ -159,3 +159,13 @@ test("lekar i pregledi", async () => {
   assert.equal(merchantCat([], "STOMATOLOSKA ORDINACIJA DR PETROVIC", -4500).cat, "lekar");
   assert.equal(merchantCat([], "APOTEKA BENU", -800).cat, "apoteka");
 });
+
+test("pozorište i kultura", async () => {
+  const { merchantCat, CATS } = await import("../src/logic.js");
+  const { parseSpoken } = await import("../src/spoken.js");
+  assert.ok(CATS.some(c => c.id === "pozoriste"));
+  assert.equal(merchantCat([], "NARODNO POZORISTE BEOGRAD", -1800).cat, "pozoriste");
+  assert.equal(merchantCat([], "ATELJE 212 BEOGRAD", -1500).cat, "pozoriste");
+  assert.equal(merchantCat([], "CINEPLEXX USCE", -700).cat, "pozoriste");
+  assert.equal(parseSpoken("pozoriste 2 karte 3600").cat, "pozoriste");
+});

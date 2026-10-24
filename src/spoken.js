@@ -132,6 +132,7 @@ export function guessCat(r, rules = []) {
   if (/^trafik/.test(d)) return r.items.length && r.items.every(i => itemGroup(i.name).id === "cigarete") ? "cigarete" : "kupovina";
   if (/^(kafic|kafa)/.test(d)) return "izlasci";
   if (/^frizer/.test(d)) return "zasebe";
+  if (/^(pozori|teatar|bioskop|koncert|muzej|predstav)/.test(d)) return "pozoriste";
   if (/^(lekar|doktor|pregled|zubar|stomatolog|ordinacij|laboratorij)/.test(d)) return "lekar";
   const m = merchantCat(rules, r.desc, -1).cat;
   if (m !== "nerazvrstano") return m;
