@@ -1,7 +1,7 @@
 // Kratak uvod pri otvaranju appa: na bež pozadini kutije okreće se 3D kartica, pojavi se logo,
 // pa se pozadina skupi u kutiju na početnoj strani (kartica ide sa njom), a logo ode na svoje mesto gore.
 // Ukupno oko dve sekunde. Preskače se kad je uključeno smanjeno kretanje i posle automatskog osvežavanja.
-const TILE = "#dfddcd";
+const TILE = "#fffad8";
 const EASE = "cubic-bezier(.72,0,.18,1)";
 
 export function shouldPlayIntro() {

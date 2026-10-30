@@ -39,7 +39,7 @@ function applyTheme(t) {
   if (t === "svetla") root.dataset.theme = "light"; else if (t === "tamna") root.dataset.theme = "dark"; else delete root.dataset.theme;
   const dark = t === "tamna" || (t === "sistem" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.remove());
-  const m = document.createElement("meta"); m.name = "theme-color"; m.content = S.view === "pregled" || S.view === "profil" ? "#73393a" : dark ? "#1b1813" : "#e3e0d2";
+  const m = document.createElement("meta"); m.name = "theme-color"; m.content = ["pregled", "profil", "stednja"].includes(S.view) ? "#2c110c" : dark ? "#2c110c" : "#fffad8";
   document.head.appendChild(m);
 }
 function setTheme(t) { try { localStorage.setItem("kp-theme", t); } catch (_) {} applyTheme(t); }

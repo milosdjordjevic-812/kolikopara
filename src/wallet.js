@@ -18,7 +18,7 @@ export const mountNamed = (el, name, o = {}) => name === "kasica"
   : mountModel(el, { url: `/models/${name}.glb`, period: 24, ...o });
 
 // still: ugao u radijanima za mirnu sliku bez okretanja (koristi se i za ikonicu appa)
-export function mountModel(el, { url, line = "#1b1813", fill = "#dfddcd", width = 1.15, period = 18, still = null, zoom = 0.9, mask = false } = {}) {
+export function mountModel(el, { url, line = "#2d120d", fill = "#fffad8", width = 1.15, period = 18, still = null, zoom = 0.9, mask = false } = {}) {
   // mask: površine ne crtaju boju, samo sakrivaju linije iza sebe, pa se vidi pozadina strane
   const reduce = still !== null || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const renderer = new WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: still !== null });

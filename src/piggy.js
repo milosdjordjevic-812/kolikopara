@@ -28,7 +28,7 @@ function surfaceCircle(dir, r, steps = 28) {
   return line(pts, true);
 }
 
-export function buildPiggy({ line: ink = "#1b1813" } = {}) {
+export function buildPiggy({ line: ink = "#2d120d" } = {}) {
   const root = new Group();
   const solids = [];
   const solid = (geo, pos, rot, scaleHull) => {

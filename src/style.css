@@ -1,37 +1,37 @@
-/* Isti jezik kao portfolio: kost, mastilo, žalfija za izbor, vino za uvodnu traku,
-   a glavna akcija je tamna pločica sa tekstom u zagradama, kao [ CONTACT ME ]. */
+/* Boje kao novi portfolio (Figma, Milos Sajt): krem pozadina, tamno braon mastilo i traka,
+   svetloplava za izbor i glavnu akciju na traci, kao [ CONTACT ME ]. */
 :root {
-  --bg: #e3e0d2; --sheet: #ebe8dc; --ink: #1b1813; --taupe: #877e73;
-  --sage: #454f3d; --on-sage: #ece7d8; --wine: #73393a; --on-wine: #e3e0d1;
-  --cta: #1b1813; --on-cta: #ece7d8;
-  --line: rgba(27,24,19,.14); --track: rgba(27,24,19,.08); --soft: rgba(27,24,19,.045);
-  --pos: #454f3d; --scrim: rgba(27,24,19,.38);
+  --bg: #fffad8; --sheet: #fffdee; --ink: #2d120d; --taupe: #968672;
+  --sage: #cde3e8; --on-sage: #2d120d; --wine: #2d120d; --on-wine: #fffad8;
+  --cta: #2d120d; --on-cta: #fffad8;
+  --line: rgba(45,18,13,.14); --track: rgba(45,18,13,.08); --soft: rgba(45,18,13,.045);
+  --pos: #2d120d; --scrim: rgba(45,18,13,.38);
   /* uvodna traka je ista u obe teme, kao hero na portfoliju */
   --grain-n: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='.3 0 0 0 .35 .3 0 0 0 .35 .3 0 0 0 .35 0 0 0 0 1'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   --grain-band: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .89 0 0 0 0 .88 0 0 0 0 .82 0 0 0 .09 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  --band: #73393a; --band-ink: #ece7d8; --band-mute: #a89a90; --tile: #dfddcd;
+  --band: #2c110c; --band-ink: #fffad8; --band-mute: #8f8582; --band-hi: #cde3e8; --tile: #fffad8;
   --f: "Schibsted Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --gut: clamp(16px, 4.2vw, 60px);
   /* zrno ide samo na pozadine, nikad preko teksta, slika ili dugmadi */
-  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .11 0 0 0 0 .09 0 0 0 0 .07 0 0 0 .2 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .18 0 0 0 0 .07 0 0 0 0 .05 0 0 0 .16 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   --bar: 62px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1b1813; --sheet: #24211b; --ink: #e3e0d2; --taupe: #a39a8e;
-    --sage: #56624b; --on-sage: #ece7d8; --wine: #8a4748; --on-wine: #efe9dc;
-    --cta: #e3e0d2; --on-cta: #1b1813;
-    --line: rgba(227,224,210,.16); --track: rgba(227,224,210,.10); --soft: rgba(227,224,210,.05);
-    --pos: #a9b998; --scrim: rgba(0,0,0,.55); --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .89 0 0 0 0 .88 0 0 0 0 .82 0 0 0 .14 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); color-scheme: dark;
+    --bg: #2c110c; --sheet: #3a1d17; --ink: #fffad8; --taupe: #a99b8c;
+    --sage: #cde3e8; --on-sage: #2d120d; --wine: #cde3e8; --on-wine: #2d120d;
+    --cta: #cde3e8; --on-cta: #2d120d;
+    --line: rgba(255,250,216,.16); --track: rgba(255,250,216,.10); --soft: rgba(255,250,216,.05);
+    --pos: #cde3e8; --scrim: rgba(0,0,0,.55); --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 .98 0 0 0 0 .85 0 0 0 .1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #1b1813; --sheet: #24211b; --ink: #e3e0d2; --taupe: #a39a8e;
-  --sage: #56624b; --on-sage: #ece7d8; --wine: #8a4748; --on-wine: #efe9dc;
-  --cta: #e3e0d2; --on-cta: #1b1813;
-  --line: rgba(227,224,210,.16); --track: rgba(227,224,210,.10); --soft: rgba(227,224,210,.05);
-  --pos: #a9b998; --scrim: rgba(0,0,0,.55); --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .89 0 0 0 0 .88 0 0 0 0 .82 0 0 0 .14 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); color-scheme: dark;
+  --bg: #2c110c; --sheet: #3a1d17; --ink: #fffad8; --taupe: #a99b8c;
+  --sage: #cde3e8; --on-sage: #2d120d; --wine: #cde3e8; --on-wine: #2d120d;
+  --cta: #cde3e8; --on-cta: #2d120d;
+  --line: rgba(255,250,216,.16); --track: rgba(255,250,216,.10); --soft: rgba(255,250,216,.05);
+  --pos: #cde3e8; --scrim: rgba(0,0,0,.55); --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 .98 0 0 0 0 .85 0 0 0 .1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); color-scheme: dark;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent }
 html { margin: 0; min-height: 100%; background-color: var(--bg); background-image: var(--grain) }
@@ -77,20 +77,20 @@ h2 { font-size: clamp(28px, 7vw, 44px); line-height: 1.15; letter-spacing: -.025
 .band.fill { min-height: 100vh; min-height: 100dvh; padding-bottom: calc(var(--bar) + 24px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column }
 .band.fill .mid { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-block: 24px }
 .band .chip { color: var(--band-ink) }
-.band .chip[aria-pressed="true"] { background: #454f3d; color: #ece7d8 }
+.band .chip[aria-pressed="true"] { background: var(--band-hi); color: #2d120d }
 .band .periods { justify-content: center; margin-top: 26px }
-.band .eyebrow { background: #1b1813; color: #ece7d8 }
+.band .eyebrow { background: var(--band-ink); color: #2d120d }
 .band .label { font-size: 12px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; margin-top: 22px; color: var(--band-mute) }
-.band h1 { margin-top: 10px; color: var(--band-ink) }
+.band h1 { margin-top: 10px; color: var(--band-hi) }
 .band h1 .rsd { color: var(--band-mute); font-size: .32em; letter-spacing: .02em; margin-left: .12em; vertical-align: .95em }
 .band .sub { margin: 14px auto 0; max-width: 30em; font-size: 12px; line-height: 17px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase }
 .band .sub span { color: var(--band-mute) }
-.band .cta { background: #1b1813; color: #ece7d8 }
+.band .cta { background: var(--band-hi); color: #2d120d }
 .wallet { width: min(62vw, 260px); aspect-ratio: 1; max-width: 100%; margin: 22px auto 0; background: var(--tile); position: relative; overflow: hidden }
 .wallet canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block }
 .band .actions { margin-top: 20px; display: flex; justify-content: center }
 .install { margin-top: 16px; border: 1px solid var(--line); padding: 12px 14px; font-size: 15px; line-height: 21px; display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; text-align: left }
-.band .install { border-color: rgba(236,231,216,.25) }
+.band .install { border-color: rgba(255,250,216,.25) }
 
 .periods { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px }
 .hero { margin-top: 28px; display: grid; gap: 16px }
@@ -106,7 +106,7 @@ section { margin-top: 52px }
 .crow .name { font-size: clamp(19px, 5vw, 28px); font-weight: 500; letter-spacing: -.02em; text-transform: uppercase; line-height: 1.1; min-width: 0 }
 .crow .amt { font-size: clamp(18px, 4.6vw, 24px); font-weight: 500; letter-spacing: -.02em; text-align: right }
 .bar { grid-column: 2 / -1; height: 6px; background: var(--track); position: relative }
-.bar i { position: absolute; inset: 0 auto 0 0; background: var(--sage) }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink) }
 .bar i.muted { background: var(--taupe) }
 .crow .meta { grid-column: 2 / -1 }
 .mrow { display: grid; grid-template-columns: 35px minmax(0,1fr) auto; gap: 4px 16px; padding: 13px 0 15px; border-bottom: 1px solid var(--line); align-items: baseline }
@@ -181,12 +181,12 @@ section { margin-top: 52px }
 .cam { position: fixed; inset: 0; z-index: 30; background: #000; display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100%; height: 100dvh }
 .cam .view { position: relative; min-height: 0; overflow: hidden }
 .cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover }
-.cam .close { position: absolute; left: var(--gut); top: calc(14px + env(safe-area-inset-top, 0px)); z-index: 2; background: #e3e0d1; color: #1b1813 }
-.cam .frame { position: absolute; left: 50%; top: 42%; width: min(70vw, 340px); aspect-ratio: 1; transform: translate(-50%, -50%); box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); outline: 2px solid #e3e0d1 }
-.cam .hint { position: absolute; left: 0; right: 0; top: calc(42% + min(35vw, 170px) + 18px); text-align: center; color: #e3e0d1; font-size: 15px; padding-inline: 24px }
-.cam .bottom { background: #1b1813; color: #e3e0d1; padding: 16px var(--gut) calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; gap: 10px; justify-content: center }
-.cam .bottom .btn { color: #e3e0d1; box-shadow: inset 0 0 0 1px rgba(227,224,209,.35) }
-.cam .bottom .filebtn span.b { background: #e3e0d1; color: #1b1813 }
+.cam .close { position: absolute; left: var(--gut); top: calc(14px + env(safe-area-inset-top, 0px)); z-index: 2; background: #fffad8; color: #2d120d }
+.cam .frame { position: absolute; left: 50%; top: 42%; width: min(70vw, 340px); aspect-ratio: 1; transform: translate(-50%, -50%); box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); outline: 2px solid #fffad8 }
+.cam .hint { position: absolute; left: 0; right: 0; top: calc(42% + min(35vw, 170px) + 18px); text-align: center; color: #fffad8; font-size: 15px; padding-inline: 24px }
+.cam .bottom { background: #2c110c; color: #fffad8; padding: 16px var(--gut) calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; gap: 10px; justify-content: center }
+.cam .bottom .btn { color: #fffad8; box-shadow: inset 0 0 0 1px rgba(255,250,216,.35) }
+.cam .bottom .filebtn span.b { background: #fffad8; color: #2d120d }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--bar) + 14px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); font-size: 14px; padding: 8px 14px; z-index: 40; max-width: calc(100% - 32px) }
 .empty { border-top: 1px solid var(--line); padding: 24px 0; display: grid; gap: 12px }
@@ -209,15 +209,15 @@ section { margin-top: 52px }
 .orow .q { grid-column: 1 / -1; font-size: 11px; margin-top: -4px }
 .orow.chk input[data-oamt] { border-bottom-color: var(--wine) }
 .orow.chk .q:last-child { color: var(--wine) }
-.okline { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 15px; color: var(--sage) }
+.okline { display: flex; gap: 8px; align-items: center; margin: 0; font-size: 15px; color: var(--ink) }
 .raw summary { cursor: pointer; padding: 4px 0 }
 .raw pre { white-space: pre-wrap; font-size: 12px; line-height: 16px; color: var(--taupe); max-height: 40vh; overflow: auto; margin: 8px 0 0 }
 .filebtn span.b.cta-like { background: var(--cta); color: var(--on-cta); font-size: 15px; padding: 4px 10px }
 /* kamera: dva načina, QR i tekst računa */
-.cam .modes { display: grid; grid-template-columns: 1fr 1fr; width: 100%; max-width: 420px; box-shadow: inset 0 0 0 1px rgba(227,224,209,.35) }
-.cam .mode { border: 0; background: transparent; color: #e3e0d1; text-transform: uppercase; font-size: 14px; letter-spacing: -.01em; line-height: 18px; padding: 10px 8px }
-.cam .mode[aria-pressed="true"] { background: #e3e0d1; color: #1b1813 }
-.cam .shutter { display: none; position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 2; background: #e3e0d1; color: #1b1813; font-size: 24px; line-height: 30px; padding: 8px 22px }
+.cam .modes { display: grid; grid-template-columns: 1fr 1fr; width: 100%; max-width: 420px; box-shadow: inset 0 0 0 1px rgba(255,250,216,.35) }
+.cam .mode { border: 0; background: transparent; color: #fffad8; text-transform: uppercase; font-size: 14px; letter-spacing: -.01em; line-height: 18px; padding: 10px 8px }
+.cam .mode[aria-pressed="true"] { background: #fffad8; color: #2d120d }
+.cam .shutter { display: none; position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 2; background: #fffad8; color: #2d120d; font-size: 24px; line-height: 30px; padding: 8px 22px }
 .cam[data-mode="text"] .shutter, .cam[data-nocam] .shutter { display: block }
 .cam .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none }
 .cam.shot .flash { animation: flash .35s ease-out }
@@ -227,17 +227,17 @@ section { margin-top: 52px }
 
 /* uvod */
 #intro { position: fixed; inset: 0; z-index: 60; overflow: hidden }
-#intro .i-bg { position: absolute; inset: 0; background: #dfddcd; will-change: clip-path }
+#intro .i-bg { position: absolute; inset: 0; background: #fffad8; will-change: clip-path }
 #intro .i-card { position: absolute; will-change: transform }
 #intro .i-card canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block }
-#intro .i-logo { position: absolute; left: 50%; font-size: 30px; transform: translate(-50%, 0); white-space: nowrap; color: #1b1813; opacity: 0; will-change: transform }
+#intro .i-logo { position: absolute; left: 50%; font-size: 30px; transform: translate(-50%, 0); white-space: nowrap; color: #2d120d; opacity: 0; will-change: transform }
 .intro-on #app .logo { visibility: hidden }
 
 /* koliko imaš */
 .haverow { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 12px auto 0 }
 .have { display: inline-flex; align-items: baseline; gap: 8px; margin: 0; border: 0; background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); padding: 6px 12px }
 .have .num { font-size: 20px; font-weight: 500; letter-spacing: -.01em }
-.band .have { color: var(--band-ink); box-shadow: inset 0 0 0 1px rgba(236,231,216,.35) }
+.band .have { color: var(--band-ink); box-shadow: inset 0 0 0 1px rgba(255,250,216,.35) }
 .band .have .meta { color: var(--band-mute) }
 .have.empty .meta { color: inherit }
 .band .have.empty .meta { color: var(--band-ink) }
@@ -251,7 +251,7 @@ section { margin-top: 52px }
 
 /* profil: okrugla slika gore desno, kao u "kako ide?" */
 .topr { display: flex; gap: 12px; align-items: center }
-.ava { width: 36px; height: 36px; border: 0; padding: 0; border-radius: 50%; background: var(--tile); color: #1b1813; display: grid; place-items: center; overflow: hidden; flex: none; cursor: pointer }
+.ava { width: 36px; height: 36px; border: 0; padding: 0; border-radius: 50%; background: var(--band-hi); color: #2d120d; display: grid; place-items: center; overflow: hidden; flex: none; cursor: pointer }
 .ava img { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(.15) }
 .ava.big { width: 132px; height: 132px; margin: 22px auto 0 }
 .band .top { position: relative; min-height: 36px }
@@ -264,9 +264,9 @@ section { margin-top: 52px }
 .duo > * { min-width: 0; padding: 0 18px }
 .duo button { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer }
 .duo .label { margin-top: 0 }
-.duo .big { margin-top: 8px; font-size: clamp(30px, 9.5vw, 60px); line-height: .9; font-weight: 500; letter-spacing: -.03em; color: var(--band-ink); white-space: nowrap; font-variant-numeric: proportional-nums }
+.duo .big { margin-top: 8px; font-size: clamp(30px, 9.5vw, 60px); line-height: .9; font-weight: 500; letter-spacing: -.03em; color: var(--band-hi); white-space: nowrap; font-variant-numeric: proportional-nums }
 .duo.long .big { font-size: clamp(24px, 7.4vw, 48px) }
-.duo > :first-child { border-right: 1px solid rgba(236,231,216,.22) }
+.duo > :first-child { border-right: 1px solid rgba(255,250,216,.22) }
 .duo .big.set { font-size: clamp(20px, 6vw, 30px); text-transform: uppercase; text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px }
 
 /* sekcije profila */
@@ -277,15 +277,15 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 .tile:nth-child(2n) { padding-left: 12px; border-left: 1px solid var(--line) }
 .tile .v { font-size: 26px; font-weight: 500; letter-spacing: -.02em; line-height: 30px }
 .meta.up { color: var(--wine) }
-.meta.down { color: var(--sage) }
+.meta.down { color: var(--ink) }
 .wallet.wide { width: 100%; max-width: 560px; aspect-ratio: 2 / 1; margin: 0 }
 
 .chart { position: relative }
 .chart .tip { min-height: 16px; margin-bottom: 6px }
 .chart svg { width: 100%; height: auto; display: block; overflow: visible }
-.chart .bar path { fill: var(--ink) }
-.chart .bar.cur path { fill: var(--wine) }
-.chart .bar.on path { fill: var(--sage) }
+.chart .bar path { fill: var(--ink); fill-opacity: .42 }
+.chart .bar.cur path { fill: var(--ink); fill-opacity: 1 }
+.chart .bar.on path { fill: var(--sage); fill-opacity: 1 }
 .chart .bar { cursor: pointer }
 .chart .base { stroke: var(--line); stroke-width: 1 }
 .chart .avg { stroke: var(--taupe); stroke-width: 1.2; stroke-dasharray: 4 4 }
@@ -329,13 +329,13 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 .say .note { grid-column: 1 / -1; margin: 0 0 6px }
 .saybtn { display: inline-flex; align-items: center; gap: 8px; border: 0; background: var(--ink); color: var(--bg); padding: 10px 14px 10px 12px; font: inherit; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer }
 .say.on { grid-template-columns: minmax(0,1fr) }
-.say.on .saybtn { background: var(--wine); color: #f1ece0; justify-content: center; animation: kp-listen 1.2s ease-in-out infinite }
+.say.on .saybtn { background: var(--wine); color: var(--on-wine); justify-content: center; animation: kp-listen 1.2s ease-in-out infinite }
 @keyframes kp-listen { 50% { opacity: .78 } }
 .cam .bottom .btn svg { vertical-align: -3px }
 .cam .bottom [data-voice] { display: inline-flex; align-items: center; gap: 6px }
 
 /* štednja */
-.goalbar { height: 6px; width: min(280px, 80%); margin: 14px auto 0; background: rgba(236,231,216,.16) }
+.goalbar { height: 6px; width: min(280px, 80%); margin: 14px auto 0; background: rgba(255,250,216,.16) }
 .goalbar i { display: block; height: 100%; background: var(--band-ink) }
 
 /* koliko smeš dnevno, prosečna potrošnja sa ili bez računa */
