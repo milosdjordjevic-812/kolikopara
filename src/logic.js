@@ -27,6 +27,7 @@ export const CATS = [
   { id: "gotovina",     name: "Gotovina, bez računa",kind: "spend" },
   { id: "provizije",    name: "Banka i provizije",   kind: "spend" },
   { id: "ostalo",       name: "Ostalo",              kind: "spend" },
+  { id: "nezabelezeno", name: "Nezabeleženo",        kind: "spend" },
   { id: "nerazvrstano", name: "Nerazvrstano",        kind: "spend" },
   { id: "interno",      name: "Između mojih računa", kind: "neutral" },
   { id: "priliv",       name: "Priliv",              kind: "income" },
@@ -306,4 +307,41 @@ export function savings(receipts) {
   const g = receipts.filter(r => r.cat === "cilj").sort((a, b) => String(a.created_at || a.issued_at).localeCompare(String(b.created_at || b.issued_at))).pop();
   const goal = g && Number(g.total) > 0 ? { name: g.merchant || "", amount: Number(g.total), row: g } : null;
   return { total, rows, goal, left: goal ? Math.max(0, r2(goal.amount - total)) : 0, pct: goal ? Math.min(100, Math.round(total / goal.amount * 100)) : 0 };
+}
+
+/*
+ * Razlika u stanju: kad upišeš novo stanje, app uporedi koliko je očekivao (prethodno stanje,
+ * plus uplate, minus potrošnja između dva upisa) sa onim što si upisao. Ako imaš manje nego što je
+ * očekivao, razlika je potrošnja koju nisi zabeležio; ako imaš više, priliv koji nisi zabeležio.
+ * Računa se svaki put iznova, pa se smanji sama kad kasnije ubaciš izvod ili upišeš stavke.
+ */
+const fmt0 = n => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 }).format(n);
+export function stanjeGaps(receipts, list) {
+  const at = r => String(r.created_at || r.issued_at || "");
+  const st = receipts.filter(r => r.cat === "stanje").sort((a, b) => String(a.issued_at).localeCompare(String(b.issued_at)) || at(a).localeCompare(at(b)));
+  const out = [];
+  for (let i = 1; i < st.length; i++) {
+    const a = st[i - 1], b = st[i];
+    const da = String(a.issued_at).slice(0, 10), db = String(b.issued_at).slice(0, 10), ta = at(a), tb = at(b);
+    const between = list.filter(e => {
+      const t = e.receipt ? String(e.receipt.created_at || "") : "";
+      const afterA = e.d > da || (e.d === da && !!e.receipt && t > ta);
+      const beforeB = e.d < db || (e.d === db && (!e.receipt || t < tb));
+      return afterA && beforeB;
+    });
+    // ispravka greške u kucanju istog dana, bez ičega između: nije razlika
+    if (!between.length && da === db) continue;
+    const T = totals(between);
+    const expected = r2(Number(a.total) + T.inc - T.spend - T.saved);
+    const gap = r2(expected - Number(b.total));
+    if (Math.abs(gap) < 1) continue;
+    const cat = gap > 0 ? "nezabelezeno" : "priliv";
+    out.push({
+      type: "gap", id: "gap:" + b.id, d: db, t: "RAZLIKA U STANJU", name: gap > 0 ? "Nezabeležena potrošnja" : "Nezabeležen priliv",
+      amount: -gap, receipt: null, cash: false, manual: false, cat, person: "",
+      label: `razlika u stanju: app je očekivao ${fmt0(expected)}, upisao si ${fmt0(Number(b.total))}`,
+      parts: [{ cat, amount: -gap }],
+    });
+  }
+  return out;
 }

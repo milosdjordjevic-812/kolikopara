@@ -216,7 +216,7 @@ export function habits(list, today) {
   const freq = {};
   let buys = 0, buySum = 0;
   for (const e of recent) {
-    if (e.amount >= 0 || e.parts.every(p => CAT[p.cat]?.kind !== "spend" || p.cat === "gotovina")) continue;
+    if (e.type === "gap" || e.amount >= 0 || e.parts.every(p => CAT[p.cat]?.kind !== "spend" || p.cat === "gotovina")) continue;
     buys++; buySum += -e.amount;
     const k = e.name; (freq[k] ||= { n: 0, v: 0 }); freq[k].n++; freq[k].v += -e.amount;
   }

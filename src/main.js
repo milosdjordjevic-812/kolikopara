@@ -1,6 +1,6 @@
 import "./style.css";
 import { sb, configured, loadAll, saveOverride, deleteOverride, saveRule, deleteRule, insertReceipt, updateReceipt, deleteReceipt, replaceBankRange, importBackup, exportBackup } from "./db.js";
-import { CATS, CAT, catName, derive, totals, balance, savings, FIXED, META_CATS, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
+import { CATS, CAT, catName, derive, totals, balance, savings, FIXED, META_CATS, stanjeGaps, merchantKey, groupKey, merchantCat, itemCat, upper } from "./logic.js";
 import { parseIps, isFiscalUrl, fiscalUrl, latin } from "./shared/fiscal.js";
 import { startCamera, grabFrame, decodePhotoQr } from "./scan.js";
 import { readStatement, rowsFrom, parseAmt } from "./importer.js";
@@ -115,7 +115,10 @@ async function load() {
   render();
 }
 let cache = null;
-function list() { if (!cache) cache = derive(S.data); return cache; }
+function list() {
+  if (!cache) { const L = derive(S.data); cache = L.concat(stanjeGaps(S.data.receipts, L)).sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0)); }
+  return cache;
+}
 function changed() { cache = null; render(); }
 function periods() { return [...new Set(list().map(e => e.d.slice(0, 7)))].sort(); }
 const inPeriod = e => S.period === "sve" || e.d.startsWith(S.period);
@@ -838,6 +841,7 @@ function personsList() {
 }
 function openEdit(id) {
   const e = list().find(x => x.id === id); if (!e) return;
+  if (e.type === "gap") { toast(e.amount < 0 ? "Ovo je novac koji je nestao, a nije zabeležen. Kad upišeš te troškove ili ubaciš izvod, razlika se sama smanji." : "Ovo je novac koji je stigao, a nije zabeležen. Kad upišeš tu uplatu, razlika se sama smanji."); return; }
   const rc = e.receipt;
   if (e.type === "bank") {
     const ov = S.data.overrides[id];
@@ -876,7 +880,7 @@ function drawSheet() {
     <div class="num" style="font-size:22px;font-weight:500">${signed(e.amount)} RSD</div>
     <div class="meta dim" style="letter-spacing:.04em;text-transform:none">${esc(e.type === "bank" ? e.t : [rc.merchant, rc.store].filter(Boolean).join(", "))}${e.fee ? ", uključena konverzija " + money(-e.fee, true) : ""}${rc && e.type === "bank" ? ", uparen sa računom" : ""}</div>
     ${isRec ? `<div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["gotovina", "kartica", "racun"].map(p => `<button class="chip" data-pay="${p}" aria-pressed="${st.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>` : ""}
-    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.id !== "gotovina" || !isRec).map(c => `<button class="chip" data-setcat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.id !== "nezabelezeno" && (c.id !== "gotovina" || !isRec)).map(c => `<button class="chip" data-setcat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
     ${isPass ? `<div class="map">
       <label class="field"><span class="meta">Za koga</span><input id="sh-person" list="sh-people" value="${esc(st.person)}" placeholder="Ime osobe" autocomplete="off"><datalist id="sh-people">${personsList().map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>
       ${isRec ? "" : `<label class="field"><span class="meta">Koliko je prolazno</span><input id="sh-pass" inputmode="decimal" value="${esc(st.pass)}" placeholder="Ceo iznos ${money(e.amount, true)}"></label>`}
@@ -954,7 +958,7 @@ function drawItemSheet() {
     <span class="meta dim">Artikal</span>
     <h3>${esc(st.it.name)}</h3>
     <div class="num" style="font-size:20px;font-weight:500">${money(st.it.total, true)} RSD</div>
-    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina").map(c => `<button class="chip" data-icat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina" && c.id !== "nezabelezeno").map(c => `<button class="chip" data-icat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
     <label class="field"><span class="meta">Važi za sve artikle koji sadrže</span><input id="it-key" class="search" value="${esc(st.key)}"></label>
     <div class="row-btns"><button class="cta" data-isave>[ Sačuvaj ]</button><button class="btn" data-back>Nazad</button></div>
   </div></div>`;
@@ -1192,7 +1196,7 @@ function drawOcr() {
       <label class="field"><span class="meta">Vreme</span><input id="o-time" type="time" value="${esc(rc.issued_at.slice(11, 16))}"></label>
     </div>
     <div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["gotovina", "kartica", "racun"].map(p => `<button class="chip" data-opay="${p}" aria-pressed="${rc.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>
-    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.id !== "gotovina").map(c => `<button class="chip" data-ocat="${c.id}" aria-pressed="${base === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.id !== "gotovina" && c.id !== "nezabelezeno").map(c => `<button class="chip" data-ocat="${c.id}" aria-pressed="${base === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
     ${base === "prolazno" ? `<label class="field"><span class="meta">Za koga</span><input id="o-person" list="o-people" value="${esc(rc.person)}" autocomplete="off"><datalist id="o-people">${personsList().map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>` : ""}
     <div class="field"><span class="meta">Artikli</span>
       <div class="oitems">${rc.items.map((it, i) => `<div class="orow${it.check ? " chk" : ""}">
@@ -1258,7 +1262,7 @@ function drawManual() {
       ${its.length ? `<span class="meta dim">Zbir artikala ${money(isum, true)}${st.amount && Math.abs(Math.abs(parseAmt(st.amount)) - isum) > 0.01 ? ", razlika ide u kategoriju ispod" : ""}</span>` : ""}
     </div>
     <div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["gotovina", "kartica", "racun"].map(p => `<button class="chip" data-mpay="${p}" aria-pressed="${st.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>
-    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina" || c.id === "prolazno").map(c => `<button class="chip" data-mcat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid">${CATS.filter(c => c.kind === "spend" && c.id !== "gotovina" && c.id !== "nezabelezeno" || c.id === "prolazno").map(c => `<button class="chip" data-mcat="${c.id}" aria-pressed="${st.cat === c.id}">${catIcon(c.id, 16)}${esc(c.name)}</button>`).join("")}</div></div>
     ${st.cat === "prolazno" ? `<label class="field"><span class="meta">Za koga</span><input id="m-person" list="m-people" value="${esc(st.person)}" autocomplete="off"><datalist id="m-people">${personsList().map(p => `<option value="${esc(p)}">`).join("")}</datalist></label>` : ""}
     <p class="note" style="margin:0">Gotovina se odbija od podignutog novca. Kartica i sa računa se uparuju sa izvodom, pa se ne računaju dva puta.</p>`}
     <div class="row-btns"><button class="cta" data-msave>[ Sačuvaj ]</button><button class="btn" data-close>Otkaži</button></div>

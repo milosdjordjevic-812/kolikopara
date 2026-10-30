@@ -169,3 +169,30 @@ test("pozorište i kultura", async () => {
   assert.equal(merchantCat([], "CINEPLEXX USCE", -700).cat, "pozoriste");
   assert.equal(parseSpoken("pozoriste 2 karte 3600").cat, "pozoriste");
 });
+
+test("razlika u stanju: nezabeležena potrošnja ulazi u potrošeno, a Ostalo ostaje upisano stanje", async () => {
+  const { derive, balance, totals, stanjeGaps } = await import("../src/logic.js");
+  const st = (id, total, d, c) => ({ id, kind: "manual", cat: "stanje", total, issued_at: d + "T12:00:00", created_at: c, payment: "racun", items: [] });
+  const m = (id, cat, total, d, c, extra = {}) => ({ id, kind: "manual", cat, total, issued_at: d + "T12:00:00", created_at: c, payment: "gotovina", refund: false, items: [], merchant: id, ...extra });
+  const receipts = [
+    st("s1", 20000, "2026-10-20", "2026-10-20T08:00:00Z"),
+    m("akka", "priliv", 100000, "2026-10-29", "2026-10-29T09:00:00Z", { refund: true, payment: "racun" }),
+    m("kafa", "izlasci", 1000, "2026-10-25", "2026-10-25T09:00:00Z"),
+    st("s2", 108000, "2026-10-30", "2026-10-30T14:00:00Z"),
+  ];
+  const L = derive({ tx: [], receipts });
+  const G = stanjeGaps(receipts, L);
+  // očekivano 20.000 + 100.000 - 1.000 = 119.000, upisano 108.000: 11.000 nije zabeleženo
+  assert.equal(G.length, 1);
+  assert.equal(G[0].amount, -11000);
+  const all = L.concat(G);
+  assert.equal(totals(all).spend, 12000);
+  assert.equal(balance(receipts, all).now, 108000);
+  // kad se kasnije upiše trošak od 4.000 iz te nedelje, razlika padne na 7.000
+  const r2 = receipts.concat(m("zabac", "izlasci", 4000, "2026-10-27", "2026-10-30T15:00:00Z"));
+  const L2 = derive({ tx: [], receipts: r2 });
+  assert.equal(stanjeGaps(r2, L2)[0].amount, -7000);
+  // ispravka greške u kucanju istog dana bez ičega između nije razlika
+  const typo = [st("a", 50000, "2026-10-30", "2026-10-30T10:00:00Z"), st("b", 5000, "2026-10-30", "2026-10-30T10:01:00Z")];
+  assert.equal(stanjeGaps(typo, derive({ tx: [], receipts: typo })).length, 0);
+});
