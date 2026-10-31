@@ -41,7 +41,7 @@ test("nedelja: ostatak se ne prenosi (ide u kovertu), prva nedelja se računa od
   const c2 = { ...cfg, start: "2026-11-05" }; // četvrtak: 4 dana prve nedelje
   const L = derive({ tx: [], receipts: [man("2026-11-06", "market", 5000)] });
   const w1 = weekPlan(c2, L, "2026-11-08");
-  assert.equal(w1.avail, Math.round(43466 * 4 / 7 * 100) / 100);
+  assert.equal(w1.avail, Math.round(189000 * 12 / 365.25 * 4));
   const w2 = weekPlan(c2, L, "2026-11-09");
   assert.ok(w2.last.left > 0);
   assert.equal(w2.avail, 43466);
@@ -91,4 +91,25 @@ test("koverta: gotovina podignuta i stavljena u kovertu iste nedelje nije potro�
   const w2 = weekPlan(cfg, L, "2026-11-11");
   assert.equal(w2.spent, 0);
   assert.equal(w2.avail, 43466);
+});
+
+test("samo ovog meseca: vanredna uplata važi od svog dana do kraja meseca, sledeći mesec opet stalni plan", () => {
+  const c = { ...cfg, start: "2026-11-02", incomes: [...cfg.incomes, { name: "Klijent C", day: 16, amount: 30000, month: "2026-11" }] };
+  const L = derive({ tx: [], receipts: [] });
+  assert.equal(planNumbers(c, "2026-11").life, 219000);
+  assert.equal(planNumbers(c, "2026-12").life, 189000);
+  assert.equal(weekPlan(c, L, "2026-11-11").avail, 43466);                       // pre uplate
+  assert.equal(weekPlan(c, L, "2026-11-18").avail, 43466 + Math.round(30000 / 15 * 7)); // 16. do 30., 15 dana
+  assert.equal(weekPlan(c, L, "2026-12-09").avail, 43466);
+});
+
+test("samo ovog meseca: umanjenje i mesec bez štednje i fonda", () => {
+  const c = { ...cfg, start: "2026-11-02", incomes: [...cfg.incomes, { name: "Manjak iz oktobra", day: 1, amount: -21754, month: "2026-11" }, { name: "Posao B, potrošeno ranije", day: 1, amount: -95000, month: "2026-11" }], skip: { "2026-11": { save: true, big: true } } };
+  const N = planNumbers(c, "2026-11");
+  assert.equal(N.life, 295000 - 21754 - 95000 - 61000);
+  assert.equal(N.save, 0);
+  const L = derive({ tx: [], receipts: [] });
+  assert.equal(weekPlan(c, L, "2026-11-04").avail, Math.round((189000 * 12 / 365.25 + (45000 - 21754 - 95000) / 30) * 7));
+  const m = monthPlan(c, L, [], "2026-12-05");
+  assert.equal(m.bigLeft, 15000);                                                   // novembar preskočen
 });

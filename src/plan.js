@@ -10,6 +10,7 @@ const r2 = n => Math.round(n * 100) / 100;
 const sum = (a, f = x => x.amount) => r2((a || []).reduce((s, x) => s + (Number(f(x)) || 0), 0));
 const DAY = 864e5;
 export const WEEKS_PER_MONTH = 365.25 / 12 / 7;
+const nextYm = ym => { const [y, m] = ym.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; };
 const monday = n => n - ((new Date(n * DAY).getUTCDay() + 6) % 7);
 
 // fiksni troškovi i fond za veće stvari se plaćaju sa strane, ne iz nedeljnog iznosa
@@ -23,10 +24,28 @@ export const FIXED_DEFAULT = [
 export const ENVELOPES = [{ id: "stednja", name: "Štednja" }];
 export const BIG_CATS = ["kucaauto", "lekar"];
 
-export function planNumbers(cfg) {
-  const inc = sum(cfg.incomes), fixed = sum(cfg.fixed), save = sum(cfg.save), big = Number(cfg.big?.amount) || 0;
-  const life = r2(inc - fixed - save - big);
-  return { inc, fixed, save, big, life, week: Math.round(life / WEEKS_PER_MONTH), day: Math.round(life * 12 / 365.25) };
+/*
+ * Stalne uplate važe svakog meseca. Uplate (i umanjenja) "samo ovog meseca" imaju month: "YYYY-MM"
+ * i važe samo tada, od svog dana do kraja meseca. Za jedan mesec može da se preskoči štednja ili fond (skip).
+ * Bez ym: brojevi stalnog plana. Sa ym: brojevi tog meseca.
+ */
+const dim = ym => { const [y, m] = ym.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
+const extrasOf = (cfg, ym) => (cfg.incomes || []).filter(x => x.month && x.month === ym);
+const skipOf = (cfg, ym) => (ym && cfg.skip && cfg.skip[ym]) || {};
+export function planNumbers(cfg, ym = null) {
+  const reg = sum((cfg.incomes || []).filter(x => !x.month)), fixed = sum(cfg.fixed);
+  const save0 = sum(cfg.save), big0 = Number(cfg.big?.amount) || 0, sk = skipOf(cfg, ym);
+  const extra = ym ? sum(extrasOf(cfg, ym)) : 0;
+  const save = sk.save ? 0 : save0, big = sk.big ? 0 : big0;
+  const base = r2(reg - fixed - save0 - big0), life = r2(reg + extra - fixed - save - big);
+  return { inc: r2(reg + extra), reg, extra, fixed, save, big, save0, big0, base, life, week: Math.round(base / WEEKS_PER_MONTH), day: Math.round(base * 12 / 365.25), monthWeek: ym ? Math.round(life / dim(ym) * 7) : Math.round(base / WEEKS_PER_MONTH) };
+}
+// koliko se sme jednog dana: stalni plan (isto svaki dan), plus ono što je ovog meseca drugačije
+export function dayAllowance(cfg, d) {
+  const ym = d.slice(0, 7), D = dim(ym), N = planNumbers(cfg, ym), dom = +d.slice(8, 10);
+  let a = N.base * 12 / 365.25 + (N.save0 - N.save + N.big0 - N.big) / D;
+  for (const x of extrasOf(cfg, ym)) { const from = Math.min(D, Number(x.day) || D); if (dom >= from) a += Number(x.amount) / (D - from + 1); }
+  return a;
 }
 
 // kategorije koje se ne broje u nedeljni iznos
@@ -39,7 +58,8 @@ export const outsideCats = cfg => new Set([...(cfg.fixed || []).flatMap(f => f.c
 // Gotovina stavljena u kovertu nije potrošena, ali samo ako je podignuta iste nedelje:
 // inače bi uplata u kovertu (iz ranije podignutog novca) povećala nedeljni iznos.
 export function weekPlan(cfg, list, today) {
-  const N = planNumbers(cfg), W = N.week;
+  const N = planNumbers(cfg, today.slice(0, 7));
+  const allow = (a, b) => { let x = 0; for (let n = a; n <= b; n++) x += dayAllowance(cfg, dstr(n)); return Math.round(x); };
   const noSave = list.map(e => (e.parts.some(p => p.cat === "stednja") ? { ...e, parts: e.parts.filter(p => p.cat !== "stednja") } : e));
   const daily = dailySpend(noSave, outsideCats(cfg));
   const dep = {}, wd = {};
@@ -55,11 +75,11 @@ export function weekPlan(cfg, list, today) {
   const t = dnum(today), s = Math.min(dnum(cfg.start || today), t), wT = monday(t);
   let carry = 0, last = null;
   for (let w = monday(s); w < wT; w += 7) {
-    const from = Math.max(w, s), avail = r2(W * (w + 7 - from) / 7 + carry), spent = spentIn(from, w + 6);
+    const from = Math.max(w, s), avail = r2(allow(from, w + 6) + carry), spent = spentIn(from, w + 6);
     last = { from: dstr(from), to: dstr(w + 6), avail, spent, left: r2(avail - spent) };
     carry = Math.min(0, last.left);
   }
-  const from = Math.max(wT, s), avail = r2(W * (wT + 7 - from) / 7 + carry), spent = spentIn(from, t);
+  const from = Math.max(wT, s), avail = r2(allow(from, wT + 6) + carry), spent = spentIn(from, t);
   const spentToday = Math.max(0, spentIn(t, t)), daysLeft = wT + 6 - t + 1, left = r2(avail - spent);
   const perDay = r2((left + spentToday) / daysLeft);
   // na šta je otišlo ove nedelje
@@ -84,19 +104,21 @@ export function envelopes(cfg, receipts, today) {
  * od početka plana, troši se na kuću, auto, lekara) i šta je izašlo van plana.
  */
 export function monthPlan(cfg, list, receipts, today) {
-  const ym = today.slice(0, 7), N = planNumbers(cfg);
+  const ym = today.slice(0, 7), N = planNumbers(cfg, ym);
   const T = totals(list.filter(e => e.d.startsWith(ym) && e.d <= today));
   const paid = cats => r2(cats.reduce((s, c) => s + (T.by[c] ? -T.by[c].sum : 0), 0));
   const fixed = (cfg.fixed || []).map(f => ({ ...f, paid: paid(f.cats || []) }));
   const start = (cfg.start || today).slice(0, 7);
-  const [y0, m0] = start.split("-").map(Number), [y1, m1] = ym.split("-").map(Number);
-  const months = Math.max(1, (y1 - y0) * 12 + (m1 - m0) + 1);
+  // fond se puni svakog meseca od početka plana, osim meseci kad je preskočen
+  let months = 0, bigIn = 0;
+  for (let k = start; k <= ym; k = nextYm(k)) { months++; if (!skipOf(cfg, k).big) bigIn += N.big0; }
   const bigCats = cfg.big?.cats || BIG_CATS;
   const TB = totals(list.filter(e => e.d >= (cfg.start || today) && e.d <= today));
   const bigSpent = r2(bigCats.reduce((s, c) => s + (TB.by[c] ? -TB.by[c].sum : 0), 0));
-  const bigLeft = r2(N.big * months - bigSpent);
+  const bigLeft = r2(bigIn - bigSpent);
   const over = fixed.filter(f => f.paid > f.amount + 0.5).map(f => ({ name: f.name, over: r2(f.paid - f.amount) }));
-  return { ...N, fixed, bigSpent, bigLeft, months, over, envelopes: envelopes(cfg, receipts, today) };
+  const env = envelopes(cfg, receipts, today).map(e => (N.save === 0 ? { ...e, amount: 0 } : e));
+  return { ...N, fixed, bigSpent, bigLeft, months, over, extras: extrasOf(cfg, ym), envelopes: env };
 }
 
 /*
