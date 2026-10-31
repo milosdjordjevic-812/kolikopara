@@ -837,7 +837,7 @@ function readBudzet() {
 }
 function drawBudzet() {
   const st = S.sheet, c = st.cfg, N = planNumbers(normCfg(c));
-  const days = [...Array(28)].map((_, i) => i + 1).concat([0]);
+  const days = [...Array(31)].map((_, i) => i + 1).concat([0]);
   const del = (k, i) => `<button class="chip bdel" data-bdel="${k}:${i}" aria-label="Ukloni">×</button>`;
   layer.innerHTML = `<div class="scrim" data-close></div>
   <div class="sheet" role="dialog" aria-modal="true"><div class="sheet-in">
