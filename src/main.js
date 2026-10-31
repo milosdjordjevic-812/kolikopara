@@ -743,7 +743,7 @@ function yearSaveHtml(cfg) {
   const cost = N.fixed + N.base, months = cost > 0 ? Math.round(m * 12 / cost * 10) / 10 : 0;
   const second = now > 0
     ? `<div class="tile"><span class="meta dim">U kasici ${esc(MONFULL[d.getMonth()])} ${d.getFullYear()}.</span><span class="v num">${money(now + m * 12)}</span><span class="meta dim">sada ${money(now)}, plus plan</span></div>`
-    : `<div class="tile"><span class="meta dim">Da posao stane</span><span class="v num">${String(months).replace(".", ",")} ${months >= 2 && months < 5 ? "meseca" : months === 1 ? "mesec" : "meseci"}</span><span class="meta dim">bez brige, uz ${money(cost)} mesečno</span></div>`;
+    : `<div class="tile"><span class="meta dim">Da posao stane</span><span class="v num">${String(months).replace(".", ",")} ${!Number.isInteger(months) ? "meseca" : months === 1 ? "mesec" : months >= 2 && months <= 4 ? "meseca" : "meseci"}</span><span class="meta dim">bez brige, uz ${money(cost)} mesečno</span></div>`;
   return `<section class="yearsave">
     <div class="sec-h"><h2>${icon("kasica", 26)} Štednja za godinu</h2></div>
     <div class="tiles">
@@ -782,7 +782,8 @@ function renderPlan() {
     <div class="goalbar" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct.toFixed(1)}%"></i></div>
     <p class="sub">${w.left > 0 ? `<span>To je</span> ${money(w.perDay)} <span>dnevno do kraja nedelje, danas još</span> ${money(Math.max(0, w.todayLeft))}` : `<span>Prešao si nedelju za</span> ${money(-w.left)}<span>, toliko će sledeća biti manja</span>`}</p>
     ${w.carry < 0 ? `<p class="sub"><span>Ova nedelja je manja za</span> ${money(-w.carry)} <span>zbog prošle</span></p>` : ""}
-    <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U štednju</span></button><button class="have add" data-budzet><span class="meta">Promeni plan</span></button></div>
+    <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U štednju</span></button></div>
+    <div class="actions"><button class="cta big" data-budzet>[ Promeni plan ]</button></div>
   </div>
   ${yearSaveHtml(cfg)}
 
