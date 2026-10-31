@@ -713,7 +713,7 @@ const envTotals = () => { const c = budzetCfg(); return c ? envelopes(c, S.data.
 const minus = n => (n < 0 ? "-" : "");
 function weekLine(hero = false) {
   const cfg = budzetCfg();
-  if (!cfg) return `<button class="budget" data-budzet><span class="label">Plan meseca</span><span class="bnum">Napravi plan</span><span class="meta">koliko smeš nedeljno, a da ostane i za koverte</span></button>`;
+  if (!cfg) return `<div class="actions"><button class="cta big" data-budzet>[ Napravi plan ]</button></div>`;
   const w = weekPlan(cfg, list(), today());
   return `<button class="budget${hero ? " hero" : ""}" data-go="plan"><span class="label">Ove nedelje još</span><span class="bnum num">${minus(w.left)}${money(w.left)}</span><span class="meta">${w.left > 0 ? `danas još ${money(Math.max(0, w.todayLeft))}, ` : "nedelja je potrošena, "}nedelja traje do ${esc(dShort(w.to))}</span></button>`;
 }
