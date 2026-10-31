@@ -735,13 +735,13 @@ function renderPlan() {
     <div class="goalbar" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct.toFixed(1)}%"></i></div>
     <p class="sub">${w.left > 0 ? `<span>To je</span> ${money(w.perDay)} <span>dnevno do kraja nedelje, danas još</span> ${money(Math.max(0, w.todayLeft))}` : `<span>Prešao si nedelju za</span> ${money(-w.left)}<span>, toliko će sledeća biti manja</span>`}</p>
     ${w.carry < 0 ? `<p class="sub"><span>Ova nedelja je manja za</span> ${money(-w.carry)} <span>zbog prošle</span></p>` : ""}
-    <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U kovertu</span></button><button class="have add" data-budzet><span class="meta">Promeni plan</span></button></div>
+    <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U štednju</span></button><button class="have add" data-budzet><span class="meta">Promeni plan</span></button></div>
   </div>
 
   ${lastLeft ? `<section>
     <div class="sec-h"><h2>${icon("kasica", 26)} Ostalo od prošle nedelje</h2></div>
     <p class="note">Od nedelje do ${esc(dShort(w.last.to))} ostalo ti je <b>${money(lastLeft)}</b> dinara. Podigni ih i stavi u kovertu, da se ne potroše ove nedelje.</p>
-    <div class="row-btns">${env.map(e => `<button class="btn" data-env="${esc(e.id)}" data-amt="${lastLeft}">U kovertu ${esc(e.name)}</button>`).join("")}</div>
+    <div class="row-btns">${env.map(e => `<button class="btn" data-env="${esc(e.id)}" data-amt="${lastLeft}">${env.length > 1 ? "U kovertu " + esc(e.name) : "Stavi u štednju"}</button>`).join("")}</div>
   </section>` : ""}
 
   <section>
@@ -761,7 +761,7 @@ function renderPlan() {
     <div class="hrows">
       <div><span>Uplate</span><span class="num">${money(m.inc)}</span></div>
       ${m.fixed.map(f => `<div><span>${esc(f.name)}</span><span class="num${f.paid > f.amount + 0.5 ? " warn" : ""}">${f.paid ? `plaćeno ${money(f.paid)} od ` : ""}${money(f.amount)}</span></div>`).join("")}
-      ${env.map(e => `<div><span>Koverta ${esc(e.name)}</span><span class="num">${money(e.month)} od ${money(e.amount)} ${e.month < e.amount ? `<button class="chip" data-env="${esc(e.id)}" data-amt="${Math.round(e.amount - e.month)}">+ Dodaj</button>` : ""}</span></div>`).join("")}
+      ${env.map(e => `<div><span>${env.length > 1 ? "Koverta " : ""}${esc(e.name)}</span><span class="num">${money(e.month)} od ${money(e.amount)} ${e.month < e.amount ? `<button class="chip" data-env="${esc(e.id)}" data-amt="${Math.round(e.amount - e.month)}">+ Dodaj</button>` : ""}</span></div>`).join("")}
       <div><span>Veće stvari, u fondu</span><span class="num">${minus(m.bigLeft)}${money(m.bigLeft)}</span></div>
       <div><span><b>Za život</b></span><span class="num"><b>${money(m.life)}</b>, ${money(m.week)} nedeljno</span></div>
     </div>
@@ -771,7 +771,7 @@ function renderPlan() {
   </section>
 
   ${env.some(e => e.total) ? `<section>
-    <div class="sec-h"><h2>${icon("kasica", 26)} Koverte</h2><button class="chip" data-go="stednja">Kasica</button></div>
+    <div class="sec-h"><h2>${icon("kasica", 26)} ${env.length > 1 ? "Koverte" : "Ušteđeno"}</h2><button class="chip" data-go="stednja">Kasica</button></div>
     <div class="tiles">${env.map(e => `<div class="tile"><span class="meta dim">${esc(e.name)}</span><span class="v num">${money(e.total)}</span></div>`).join("")}</div>
   </section>` : ""}`;
 }
@@ -834,7 +834,7 @@ function drawBudzet() {
       <button class="btn" data-badd="fixed">+ Trošak</button>
     </div>
 
-    <div class="bsec"><span class="meta">Prvo sebi: koverte, ${money(N.save)}</span>
+    <div class="bsec"><span class="meta">Prvo sebi: štednja, ${money(N.save)}</span>
       ${c.save.map((x, i) => `<div class="brow two">
         <input data-bf="save.${i}.name" value="${esc(x.name)}" placeholder="Naziv" autocomplete="off">
         <input data-bf="save.${i}.amount" inputmode="decimal" value="${esc(x.amount)}" placeholder="Iznos"><span></span></div>`).join("")}
@@ -844,7 +844,7 @@ function drawBudzet() {
       <div class="brow two"><span class="meta dim">Mesečno</span><input data-bf="big" inputmode="decimal" value="${esc(c.big.amount)}" placeholder="Iznos"><span></span></div>
     </div>
 
-    <p class="note" style="margin:0">Koverte puniš gotovinom istog dana kad stigne uplata. Fiksni troškovi i fond za veće stvari se ne broje u nedeljni iznos.${N.life <= 0 ? " <b>Plan ne izlazi: troškovi i koverte su veći od uplata.</b>" : ""}</p>
+    <p class="note" style="margin:0">Štednju odvajaš u gotovini istog dana kad stigne uplata. Fiksni troškovi i fond za veće stvari se ne broje u nedeljni iznos.${N.life <= 0 ? " <b>Plan ne izlazi: troškovi i štednja su veći od uplata.</b>" : ""}</p>
     <div class="row-btns"><button class="cta" data-bsave>[ Sačuvaj plan ]</button><button class="btn" data-close>Otkaži</button></div>
   </div></div>`;
 }
@@ -852,7 +852,7 @@ async function saveBudzet() {
   readBudzet();
   const cfg = normCfg(S.sheet.cfg), N = planNumbers(cfg);
   if (!cfg.incomes.length) { toast("Upiši bar jednu uplatu"); return; }
-  if (N.life <= 0) { toast("Plan ne izlazi, smanji koverte ili fond"); return; }
+  if (N.life <= 0) { toast("Plan ne izlazi, smanji štednju ili fond"); return; }
   const row = { kind: "manual", cat: "budzet", refund: false, total: N.life, issued_at: today() + "T12:00:00", merchant: "", store: "", payment: "racun", items: [cfg], person: "" };
   const saved = await guard(() => insertReceipt(row), "Plan sačuvan");
   if (!saved) return;
@@ -871,7 +871,7 @@ function renderSavings() {
     <div class="label">U kasici</div>
     <h1 class="num">${money(sv.total)}<span class="rsd">RSD</span></h1>
     <p class="sub">${sv.goal ? `<span>${esc(sv.goal.name || "Cilj")}</span> ${money(sv.goal.amount)}<span>, ${sv.left ? "još" : "cilj je pun"}</span> ${sv.left ? money(sv.left) : ""}` : `<span>Gotovina, odvojeno od onoga što trošiš</span>`}</p>
-    ${envTotals().some(e => e.total) ? `<p class="sub">${envTotals().map(e => `<span>${esc(e.name)}</span> ${money(e.total)}`).join("<span>, </span>")}</p>` : ""}
+    ${envTotals().length > 1 && envTotals().some(e => e.total) ? `<p class="sub">${envTotals().map(e => `<span>${esc(e.name)}</span> ${money(e.total)}`).join("<span>, </span>")}</p>` : ""}
     ${sv.goal ? `<div class="goalbar" role="progressbar" aria-valuenow="${sv.pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${sv.pct}%"></i></div>` : ""}
     <div class="haverow"><button class="have add" data-save-in><span class="meta">+ U kasicu</span></button>${sv.total > 0 ? `<button class="have add" data-save-out><span class="meta">Uzmi iz kasice</span></button>` : ""}<button class="have add" data-goal><span class="meta">${sv.goal ? "Promeni cilj" : "Postavi cilj"}</span></button></div>
     <div class="wallet" data-model="kasica"></div>
@@ -897,7 +897,7 @@ function renderSavings() {
 function openSave(out, pre = {}) { S.sheet = { kind: "save", out, amount: pre.amount || "", date: today(), note: "", env: pre.env ?? (budzetCfg() ? (budzetCfg().save?.[0]?.id || "") : "") }; drawSheet(); setTimeout(() => document.getElementById("s-amt")?.focus(), 60); }
 function readSave() { const st = S.sheet, g = id => document.getElementById(id); if (!g("s-amt")) return; st.amount = g("s-amt").value; st.date = g("s-date").value || today(); st.note = g("s-note").value; }
 function envChips(st) {
-  const cfg = budzetCfg(); if (!cfg) return "";
+  const cfg = budzetCfg(); if (!cfg || (cfg.save || []).length < 2) return "";
   const envs = [...(cfg.save || []).map(e => [e.id, e.name]), ["", "Kasica, bez koverte"]];
   return `<div class="field"><span class="meta">Koverta</span><div class="catgrid">${envs.map(([id, n]) => `<button class="chip" data-senv="${esc(id)}" aria-pressed="${(st.env || "") === id}">${esc(n)}</button>`).join("")}</div></div>`;
 }
@@ -923,7 +923,7 @@ async function saveSave() {
   if (st.out && amt > savings(S.data.receipts).total + 0.005) { toast("U kasici nema toliko"); return; }
   if (st.out && st.env) { const e = envTotals().find(x => x.id === st.env); if (e && amt > e.total + 0.005) { toast(`U koverti ${e.name} nema toliko`); return; } }
   const row = { kind: "manual", cat: "stednja", refund: !!st.out, total: Math.round(amt * 100) / 100, issued_at: st.date + "T12:00:00", merchant: st.note, store: st.env || "", payment: "gotovina", items: [], person: "" };
-  const saved = await guard(() => insertReceipt(row), st.out ? "Uzeto iz kasice" : st.env ? "Stavljeno u kovertu" : "Stavljeno u kasicu");
+  const saved = await guard(() => insertReceipt(row), st.out ? "Uzeto iz kasice" : st.env && envTotals().length > 1 ? "Stavljeno u kovertu" : "Stavljeno u kasicu");
   if (!saved) return;
   S.data.receipts.push(saved); S.sheet = null; drawSheet(); changed();
 }

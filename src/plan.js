@@ -19,7 +19,8 @@ export const FIXED_DEFAULT = [
   { name: "Terapija", cats: ["terapija"] },
   { name: "Pretplate", cats: ["pretplate"] },
 ];
-export const ENVELOPES = [{ id: "putovanja", name: "Putovanja" }, { id: "crnidani", name: "Crni dani" }];
+// za sada jedna koverta (štednja); može ih biti više kasnije (npr. putovanja, crni dani)
+export const ENVELOPES = [{ id: "stednja", name: "Štednja" }];
 export const BIG_CATS = ["kucaauto", "lekar"];
 
 export function planNumbers(cfg) {
@@ -72,7 +73,8 @@ export function envelopes(cfg, receipts, today) {
   const ym = today.slice(0, 7), rows = receipts.filter(r => r.cat === "stednja");
   const v = r => (r.refund ? -1 : 1) * Math.abs(Number(r.total) || 0);
   return (cfg.save || []).map(s => {
-    const mine = rows.filter(r => (r.store || "") === s.id);
+    // jedna koverta: sve uplate u kasicu su njene
+    const mine = cfg.save.length === 1 ? rows : rows.filter(r => (r.store || "") === s.id);
     return { ...s, total: sum(mine, v), month: sum(mine.filter(r => !r.refund && String(r.issued_at).startsWith(ym)), v) };
   });
 }
@@ -120,7 +122,7 @@ export function suggestPlan(list, today) {
   return {
     incomes: [...seen.values()].sort((a, b) => (a.day || 31) - (b.day || 31)),
     fixed,
-    save: ENVELOPES.map(e => ({ ...e, amount: 15000 })),
+    save: ENVELOPES.map(e => ({ ...e, amount: 30000 })),
     big: { amount: 15000, cats: BIG_CATS },
   };
 }

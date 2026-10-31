@@ -1,5 +1,5 @@
 // Čuva samo kostur aplikacije, da se brzo otvara. Podaci i računi idu uvek preko mreže.
-const CACHE = "kp-v44";
+const CACHE = "kp-v45";
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(["/"]))); });
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {
