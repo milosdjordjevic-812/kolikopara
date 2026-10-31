@@ -735,6 +735,24 @@ async function savePlan(auto) {
   S.data.receipts.push({ ...saved, created_at: saved.created_at || new Date().toISOString() }); S.sheet = null; drawSheet(); render();
 }
 
+// motivacija: koliko štednja po planu daje za godinu, i koliko će biti u kasici za 12 meseci
+function yearSaveHtml(cfg) {
+  const N = planNumbers(cfg), m = N.save0; if (!m) return "";
+  const now = savings(S.data.receipts).total, d = new Date(); d.setMonth(d.getMonth() + 12);
+  // koliko meseci bi živeo od godišnje štednje, sa troškovima iz plana (fiksno i život)
+  const cost = N.fixed + N.base, months = cost > 0 ? Math.round(m * 12 / cost * 10) / 10 : 0;
+  const second = now > 0
+    ? `<div class="tile"><span class="meta dim">U kasici ${esc(MONFULL[d.getMonth()])} ${d.getFullYear()}.</span><span class="v num">${money(now + m * 12)}</span><span class="meta dim">sada ${money(now)}, plus plan</span></div>`
+    : `<div class="tile"><span class="meta dim">Da posao stane</span><span class="v num">${String(months).replace(".", ",")} ${months >= 2 && months < 5 ? "meseca" : months === 1 ? "mesec" : "meseci"}</span><span class="meta dim">bez brige, uz ${money(cost)} mesečno</span></div>`;
+  return `<section class="yearsave">
+    <div class="sec-h"><h2>${icon("kasica", 26)} Štednja za godinu</h2></div>
+    <div class="tiles">
+      <div class="tile"><span class="meta dim">${money(m)} mesečno</span><span class="v num">${money(m * 12)}</span><span class="meta dim">za godinu dana</span></div>
+      ${second}
+    </div>
+  </section>`;
+}
+
 /* ---------- plan meseca: nedeljni iznos, koverte, fond za veće stvari (zapis cat = budzet) ---------- */
 function budzetRow() { return S.data.receipts.filter(r => r.cat === "budzet").sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || ""))).pop(); }
 function budzetCfg() { const r = budzetRow(), c = r && Array.isArray(r.items) ? r.items[0] : null; return c && Array.isArray(c.incomes) ? c : null; }
@@ -766,6 +784,7 @@ function renderPlan() {
     ${w.carry < 0 ? `<p class="sub"><span>Ova nedelja je manja za</span> ${money(-w.carry)} <span>zbog prošle</span></p>` : ""}
     <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U štednju</span></button><button class="have add" data-budzet><span class="meta">Promeni plan</span></button></div>
   </div>
+  ${yearSaveHtml(cfg)}
 
   ${lastLeft ? `<section>
     <div class="sec-h"><h2>${icon("kasica", 26)} Ostalo od prošle nedelje</h2></div>
@@ -853,7 +872,7 @@ function budzetHead(st) {
     reg: `Stalne uplate, svakog meseca, ${money(N.reg)}`,
     extra: `Samo za jedan mesec${NM.extra ? ", " + (NM.extra < 0 ? "-" : "+") + money(NM.extra) : ""}`,
     fixed: `Fiksni troškovi, ${money(N.fixed)}`,
-    save: `Prvo sebi: štednja, ${money(N.save0)}`,
+    save: `Prvo sebi: štednja, ${money(N.save0)}${N.save0 ? `, za godinu ${money(N.save0 * 12)}` : ""}`,
     bad: N.base <= 0,
   };
 }
@@ -944,6 +963,7 @@ function renderSavings() {
     <div class="haverow"><button class="have add" data-save-in><span class="meta">+ U kasicu</span></button>${sv.total > 0 ? `<button class="have add" data-save-out><span class="meta">Uzmi iz kasice</span></button>` : ""}<button class="have add" data-goal><span class="meta">${sv.goal ? "Promeni cilj" : "Postavi cilj"}</span></button></div>
     <div class="wallet" data-model="kasica"></div>
   </div>
+  ${budzetCfg() ? yearSaveHtml(budzetCfg()) : ""}
 
   <section>
     <div class="sec-h"><h2>${icon("kasica", 26)} Kako do ${sv.goal ? "cilja" : "prve uštede"}</h2></div>
