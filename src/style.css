@@ -383,3 +383,4 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 .daystrip > div + div { border-left: 1px solid rgba(255,250,216,.18) }
 .crow.future { opacity: .45; cursor: default }
 .crow .nchip { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--taupe) }
+.bmsel { border: 0; border-bottom: 1px solid var(--ink); background: transparent; padding: 8px 0; font-size: 18px; color: var(--ink); justify-self: start; min-width: 200px }

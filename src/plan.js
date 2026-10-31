@@ -285,7 +285,7 @@ export function incomeSaves(cfg) {
 export function savingsDue(cfg, receipts, today) {
   const ym = cycleMonth(today), cd = cycleDay(today), N = planNumbers(cfg, ym);
   const miss = missingOf(cfg, ym);
-  const rows = incomeSaves(cfg).filter(x => x.save > 0 && !miss.has(incomeKey(x))).map(x => ({ name: x.name, day: Number(x.day) || 0, save: x.save }));
+  const rows = incomeSaves(cfg).filter(x => x.save > 0 && !miss.has(incomeKey(x))).map(x => ({ name: x.name, day: (Number(x.day) || 0) >= 28 ? 0 : Number(x.day) || 0, save: x.save }));  // 28. i kasnije je uplata sa kraja meseca
   const cum = rows.filter(x => x.day <= cd).reduce((s, x) => s + x.save, 0);
   const due = Math.min(N.save, cum);
   const saved = envelopes(cfg, receipts, today).reduce((s, e) => s + e.month, 0);

@@ -953,7 +953,7 @@ function drawBudzet() {
     </div>
 
     <div class="bsec"><span class="meta" id="b-extra">${budzetHead(st).extra}</span>
-      ${+today().slice(8, 10) >= 25 ? `<div class="catgrid"><span class="meta dim" style="align-self:center">Za mesec</span>${[today().slice(0, 7), nextMonth(today().slice(0, 7))].map(k => `<button class="chip" data-bym="${k}" aria-pressed="${ym === k}">${esc(MONFULL[+k.slice(5) - 1])}</button>`).join("")}</div>` : ""}
+      <label class="field"><span class="meta dim">Za mesec</span><select class="bmsel" data-bymsel aria-label="Mesec">${(() => { const o = []; let k = today().slice(0, 7); for (let n = 0; n < 12; n++) { o.push(`<option value="${k}" ${k === ym ? "selected" : ""}>${esc(cap1(MONFULL[+k.slice(5) - 1]))} ${k.slice(0, 4)}.</option>`); k = nextMonth(k); } return o.join(""); })()}</select></label>
       ${c.incomes.map((x, i) => x.month !== ym ? "" : `<div class="brow">
         <input data-bf="incomes.${i}.name" value="${esc(x.name)}" placeholder="npr. Saša, projekat" autocomplete="off">
         <select data-bf="incomes.${i}.day" aria-label="Dan u mesecu">${days.map(d => `<option value="${d}" ${Number(x.day) === d ? "selected" : ""}>${d === 0 ? "kraj" : d + "."}</option>`).join("")}</select>
@@ -1787,6 +1787,7 @@ layer.addEventListener("input", ev => {
   if (S.sheet?.kind === "budzet" && ev.target.matches("[data-bf]")) { const c = S.sheet.cfg, [k, i, f] = ev.target.dataset.bf.split("."); if (k === "skipamt") { const o = c.skip[S.sheet.ym] = { ...(c.skip[S.sheet.ym] || {}) }; if (ev.target.value.trim()) { o.saveAmt = ev.target.value; delete o.save; } else delete o.saveAmt; } else if (k === "big") c.big.amount = ev.target.value; else if (k === "limits") c.limits[i] = ev.target.value; else if (c[k]?.[+i]) c[k][+i][f] = ev.target.value; updBudzet(); return; } if (ev.target.id === "m-desc") { showSugg(); syncQuickGuess(); } });
 layer.addEventListener("focusin", ev => { if (ev.target.id === "m-desc") showSugg(); });
 layer.addEventListener("change", ev => {
+  if (S.sheet?.kind === "budzet" && ev.target.matches("[data-bymsel]")) { readBudzet(); S.sheet.ym = ev.target.value; redrawKeep(); return; }
   if (S.sheet?.kind === "budzet" && ev.target.matches("[data-blimadd]")) { const id = ev.target.value; if (id) { readBudzet(); S.sheet.cfg.limits[id] = ""; redrawKeep(); } return; }
   if (S.sheet?.kind === "budzet" && ev.target.closest("[data-bf]")) {
     const el = ev.target; readBudzet(el);
