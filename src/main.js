@@ -136,6 +136,7 @@ const maxD = (a, b) => (a > b ? a : b);
 // period: nedelja (od ponedeljka), mesec (ovaj, od kad se app koristi), pocetak (od kad se app koristi), ili mesec "YYYY-MM"
 function periodRange(p = S.period) {
   const td = today();
+  if (p === "danas") return [td, td];
   if (p === "nedelja") return [mondayOf(td), td];
   if (p === "mesec") return [maxD(td.slice(0, 7) + "-01", trackStart()), td];
   if (p === "pocetak") return [trackStart(), td];
@@ -187,7 +188,7 @@ function installHint() {
 function periodChips() {
   const chip = (id, label) => `<button class="chip" data-period="${id}" aria-pressed="${S.period === id}">${esc(label)}</button>`;
   const cur = today().slice(0, 7), old = periods().filter(k => k < cur).reverse().slice(0, 2);
-  return `<div class="periods">${chip("nedelja", "Ova nedelja")}${chip("mesec", "Ovaj mesec")}${old.map(k => chip(k, MONFULL[+k.slice(5) - 1])).join("")}${chip("pocetak", "Od početka")}</div>`;
+  return `<div class="periods">${chip("danas", "Danas")}${chip("nedelja", "Ova nedelja")}${chip("mesec", "Ovaj mesec")}${old.map(k => chip(k, MONFULL[+k.slice(5) - 1])).join("")}${chip("pocetak", "Od početka")}</div>`;
 }
 
 /* ---------- pregled ---------- */
@@ -210,7 +211,7 @@ function renderOverview() {
     return;
   }
   const L = all.filter(inPer()), T = totals(L);
-  const ds = L.map(e => e.d).sort(), [ra, rb] = periodRange(), fixedRange = S.period === "nedelja" || S.period === "mesec" || S.period === "pocetak";
+  const ds = L.map(e => e.d).sort(), [ra, rb] = periodRange(), fixedRange = S.period === "danas" || S.period === "nedelja" || S.period === "mesec" || S.period === "pocetak";
   const from = fixedRange ? ra : ds[0], to = fixedRange ? rb : ds[ds.length - 1];
   const partial = S.period === "mesec" && trackStart() > today().slice(0, 8) + "01";
   const span = from ? Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1 : 1;
@@ -218,14 +219,14 @@ function renderOverview() {
   const max = cats.length ? cats[0].sum : 1;
   // limiti iz plana (nedelja: deo mesečnog limita za 7 dana; mesec: ceo); kategorije sa limitom se vide i kad je potrošeno 0
   const cfgP = budzetCfg(), td0 = today();
-  const limRange = S.period === "nedelja" ? [mondayOf(td0), dstrBack(mondayOf(td0), -6)] : S.period === "mesec" ? [td0.slice(0, 8) + "01", endOfMonth(td0)] : null;
+  const limRange = S.period === "danas" ? [td0, td0] : S.period === "nedelja" ? [mondayOf(td0), dstrBack(mondayOf(td0), -6)] : S.period === "mesec" ? [td0.slice(0, 8) + "01", endOfMonth(td0)] : null;
   const lims = cfgP && limRange ? Object.fromEntries(categoryLimits(effLimits(cfgP), all, limRange[0], limRange[1], cfgP).map(c => [c.id, c])) : null;
   // fiksni troškovi (Marjana, pretplate...): traka prema delu iznosa za ovaj period, natpis za ceo mesec
   if (lims) {
     const D = +endOfMonth(td0).slice(8, 10), wk = S.period === "nedelja", TM = totals(all.filter(e => e.d >= td0.slice(0, 8) + "01" && e.d <= td0));
     for (const f of cfgP.fixed || []) for (const id of f.cats || []) if (f.amount) {
       const paidM = TM.by[id] ? -TM.by[id].sum : 0;
-      lims[id] = { id, fixed: true, limit: Math.round(wk ? f.amount * 7 / D : f.amount), monthly: f.amount, paidM };
+      lims[id] = { id, fixed: true, limit: Math.round(wk ? f.amount * 7 / D : S.period === "danas" ? f.amount / D : f.amount), monthly: f.amount, paidM };
     }
   }
   const rowsNaSta = lims ? [...cats, ...Object.keys(lims).filter(id => !lims[id].fixed && !cats.some(x => x.c.id === id)).map(id => ({ c: CAT[id], sum: 0, n: 0 }))] : cats;
@@ -246,7 +247,7 @@ function renderOverview() {
     ${installHint()}
     ${budzetCfg() ? weekLine(true) : ""}
     ${periodChips()}
-    <div style="margin-top:26px"><span class="eyebrow">[${from ? esc(dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
+    <div style="margin-top:26px"><span class="eyebrow">[${from ? esc(from === to ? dShort(from) + from.slice(0, 4) : dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
     <div class="duo${(money(T.spend) + (b ? money(b.now) : "")).length > 13 ? " long" : ""}">
       <div><div class="label">Potrošeno</div><div class="big num">${money(T.spend)}</div></div>
       <button data-have aria-label="Koliko imaš"><div class="label">Ostalo</div>${b ? `<div class="big num">${b.now < 0 ? "-" : ""}${money(b.now)}</div>` : `<div class="big set">Upiši</div>`}</button>
@@ -262,7 +263,7 @@ function renderOverview() {
   ${unc ? `<p class="note"><button class="chip" aria-pressed="true" data-cat="nerazvrstano">Razvrstaj ${stavki(unc)}</button></p>` : ""}
 
   <section>
-    <div class="sec-h"><h2>Na šta</h2><span class="meta dim">${lims ? (S.period === "nedelja" ? "Traka: deo limita za ovu nedelju" : "Traka: limit za mesec") : "Dodirni red za stavke"}</span></div>
+    <div class="sec-h"><h2>Na šta</h2><span class="meta dim">${lims ? (S.period === "danas" ? "Traka: deo limita za danas" : S.period === "nedelja" ? "Traka: deo limita za ovu nedelju" : "Traka: limit za mesec") : "Dodirni red za stavke"}</span></div>
     <div class="rows">${rowsNaSta.map(x => { const l = lims && lims[x.c.id]; return `
       <button class="crow" data-cat="${x.c.id}">
         ${catIcon(x.c.id, 24)}
