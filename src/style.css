@@ -372,3 +372,8 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 .hrows .warn { color: var(--wine) }
 .budget.hero { margin-top: 22px; gap: 8px }
 .budget.hero .bnum { font-size: clamp(48px, 15vw, 72px); color: var(--band-hi) }
+.blab { display: flex; align-items: center; gap: 8px; font-size: 16px; min-width: 0; padding: 6px 0; border-bottom: 1px solid var(--line) }
+.bsec select[data-blimadd] { border: 0; border-bottom: 1px solid var(--ink); background: transparent; padding: 8px 0; font-size: 16px; color: var(--ink); justify-self: start }
+.bar i.over { background: var(--wine) }
+.oblig .late { color: var(--wine); font-weight: 500 }
+.oblig .ok { color: var(--taupe) }

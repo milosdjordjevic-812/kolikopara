@@ -150,3 +150,97 @@ export function suggestPlan(list, today) {
 }
 
 export const dayName = d => (Number(d) === 0 ? "poslednjeg dana" : `${d}.`);
+
+/* ---------- obaveze, limiti po kategorijama i upozorenja ---------- */
+
+// rokovi: računi 1., porez 15.; terapija i pretplate bez roka
+export const FIXED_DAYS = { porez: 15, racuni: 1 };
+const domOf = d => +d.slice(8, 10);
+
+// Fiksni troškovi ovog meseca: plaćeno, rok i da li kasni. Plaćeno je kad je plaćeno bar 90% iznosa.
+export function fixedStatus(cfg, list, today) {
+  const ym = today.slice(0, 7), D = dim(ym), dom = domOf(today);
+  const T = totals(list.filter(e => e.d.startsWith(ym) && e.d <= today));
+  return (cfg.fixed || []).map(f => {
+    const paid = r2((f.cats || []).reduce((s, c) => s + (T.by[c] ? -T.by[c].sum : 0), 0));
+    const day = f.day != null ? Number(f.day) : (FIXED_DAYS[(f.cats || [])[0]] || 0);
+    const due = day ? Math.min(D, day) : 0;
+    const done = paid >= f.amount * 0.9;
+    // rok koji je prošao pre nego što je plan napravljen se ne broji kao kašnjenje
+    const before = cfg.start && cfg.start.slice(0, 7) === ym && due && due < domOf(cfg.start);
+    const status = done ? "paid" : !due ? "open" : before ? "before" : dom > due ? "late" : due - dom <= 2 ? "soon" : "open";
+    return { name: f.name, amount: f.amount, paid, day: due, status, daysLate: status === "late" ? dom - due : 0, daysTo: due && !done ? due - dom : 0 };
+  });
+}
+
+// kategorije za život (ono što ide iz nedeljnog iznosa) za koje ima smisla limit
+export const LIMIT_CATS = ["market", "pijaca", "pekara", "dostava", "izlasci", "cigarete", "alkohol", "gorivo", "putarina", "taksi", "apoteka", "hemija", "zasebe", "teretana", "pozoriste", "kupovina"];
+
+/*
+ * Predlog mesečnih limita: prosečna potrošnja po kategoriji od kad se app koristi, preračunata na mesec,
+ * zaokružena na 500. Ako je zbir veći od 90% novca za život, sve se srazmerno smanji.
+ */
+export function suggestLimits(cfg, list, today, since) {
+  const days = Math.max(14, dnum(today) - dnum(since) + 1);
+  const T = totals(list.filter(e => e.d >= since && e.d <= today), outsideCats(cfg));
+  const k = 365.25 / 12 / days;
+  let rows = LIMIT_CATS.map(id => ({ id, avg: T.by[id] ? -T.by[id].sum * k : 0 })).filter(r => r.avg >= 1500);
+  const life = planNumbers(cfg).base, sumAvg = rows.reduce((s, r) => s + r.avg, 0);
+  const f = sumAvg > life * 0.9 && sumAvg > 0 ? life * 0.9 / sumAvg : 1;
+  return Object.fromEntries(rows.sort((a, b) => b.avg - a.avg).map(r => [r.id, Math.max(500, Math.round(r.avg * f / 500) * 500)]));
+}
+
+// Limiti za period: mesečni limit, ili njegov deo za nedelju (7 dana od dužine meseca)
+export function categoryLimits(limits, list, from, to, cfg) {
+  const ym = to.slice(0, 7), D = dim(ym), days = dnum(to) - dnum(from) + 1;
+  const share = days >= D ? 1 : days / D;
+  const rnd = v => (share < 1 ? Math.round(v / 100) * 100 : Math.round(v));
+  const T = totals(list.filter(e => e.d >= from && e.d <= to), outsideCats(cfg));
+  return Object.entries(limits || {}).map(([id, m]) => {
+    const limit = rnd(m * share), spent = T.by[id] ? r2(-T.by[id].sum) : 0;
+    return { id, monthly: m, limit, spent, left: r2(limit - spent) };
+  });
+}
+
+/*
+ * Da li novac koji imaš dobaci do kraja meseca po planu: stanje, plus uplate koje još stižu ovog meseca
+ * (bez uplate poslednjeg dana, ona je za sledeći mesec), minus neplaćeno fiksno, štednja koja još nije
+ * odvojena, fond za veće stvari i život do kraja meseca.
+ */
+export function monthForecast(cfg, list, receipts, today, balanceNow) {
+  const ym = today.slice(0, 7), D = dim(ym), dom = domOf(today), N = planNumbers(cfg, ym);
+  const incoming = r2((cfg.incomes || []).filter(x => (!x.month || x.month === ym)).filter(x => { const d = Number(x.day) || D; return d > dom && d < D; }).reduce((s, x) => s + Number(x.amount), 0));
+  const unpaid = r2(fixedStatus(cfg, list, today).reduce((s, f) => s + Math.max(0, f.amount - f.paid), 0));
+  const env = envelopes(cfg, receipts, today), saved = env.reduce((s, e) => s + e.month, 0);
+  const unsaved = Math.max(0, r2(N.save - saved));
+  const fund = Math.max(0, monthPlan(cfg, list, receipts, today).bigLeft);
+  const w = weekPlan(cfg, list, today);
+  let lifeRest = Math.max(0, w.left);
+  for (let n = dnum(w.to) + 1; n <= dnum(`${ym}-${String(D).padStart(2, "0")}`); n++) lifeRest += dayAllowance(cfg, dstr(n));
+  lifeRest = Math.round(lifeRest);
+  const gap = Math.round(balanceNow + incoming - unpaid - unsaved - fund - lifeRest);
+  return { gap, balance: balanceNow, incoming, unpaid, unsaved, fund, lifeRest };
+}
+
+// Upozorenja za početni ekran: kašnjenja, rokovi, novac koji ne dobacuje, prekoračeni limiti i nedelja
+export function planWarnings(cfg, list, receipts, today, balanceNow, limits) {
+  const out = [], ym = today.slice(0, 7), D = dim(ym), dom = domOf(today);
+  for (const f of fixedStatus(cfg, list, today)) {
+    if (f.status === "late") out.push({ level: "warn", icon: "upozorenje", title: `${f.name}: kasni ${f.daysLate} ${f.daysLate === 1 ? "dan" : "dana"}`, text: `Rok je bio ${f.day}. u mesecu. Plaćeno ${Math.round(f.paid)} od ${Math.round(f.amount)}.` });
+    else if (f.status === "soon") out.push({ level: "info", icon: "kalendar", title: `${f.name}: rok ${f.daysTo === 0 ? "je danas" : f.daysTo === 1 ? "je sutra" : `za ${f.daysTo} dana`}`, text: `Plaća se do ${f.day}. u mesecu, ${Math.round(f.amount)} dinara.` });
+  }
+  if (balanceNow != null) {
+    const F = monthForecast(cfg, list, receipts, today, balanceNow);
+    if (F.gap < -500) out.push({ level: "warn", icon: "upozorenje", title: `Do kraja meseca fali ${Math.round(-F.gap)}`, text: `Sa novcem koji imaš i uplatama koje još stižu ovog meseca, plan ne dobacuje do kraja meseca. Smanji trošenje ove nedelje, ili u planu upiši umanjenje samo za ovaj mesec.` });
+  }
+  const w = weekPlan(cfg, list, today);
+  if (w.left < 0) out.push({ level: "warn", icon: "upozorenje", title: `Nedelja je prekoračena za ${Math.round(-w.left)}`, text: `Toliko će sledeća nedelja biti manja.` });
+  // limiti važe od prvog celog meseca plana
+  const startedLate = cfg.start && cfg.start.slice(0, 7) === ym && domOf(cfg.start) > 3;
+  for (const c of startedLate ? [] : categoryLimits(limits, list, `${ym}-01`, today, cfg)) {
+    const m = c.monthly;
+    if (c.spent > m) out.push({ level: "warn", icon: c.id, title: `${CAT[c.id]?.name || c.id}: preko limita za ${Math.round(c.spent - m)}`, text: `Limit za mesec je ${Math.round(m)}, potrošeno ${Math.round(c.spent)}.` });
+    else if (c.spent > m * 0.5 && c.spent > m * (dom / D) * 1.25) out.push({ level: "info", icon: c.id, title: `${CAT[c.id]?.name || c.id}: brže od plana`, text: `Potrošeno ${Math.round(c.spent)} od ${Math.round(m)}, a prošlo je ${Math.round(dom / D * 100)}% meseca. Ovim tempom limit se probija pre kraja meseca.` });
+  }
+  return out;
+}

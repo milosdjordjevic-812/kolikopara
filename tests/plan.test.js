@@ -119,3 +119,45 @@ test("uplatnica za porez (račun trezora 840) ide u Porez za firmu, ostale uplat
   const L = derive({ tx: [], receipts: [ips("840000071444411111", "Porez i doprinosi", 22500), ips("160000000012345678", "Infostan za oktobar", 6000)] });
   assert.deepEqual(L.map(e => e.parts[0].cat).sort(), ["porez", "racuni"]);
 });
+
+import { fixedStatus, suggestLimits, categoryLimits, monthForecast, planWarnings } from "../src/plan.js";
+
+test("obaveze: računi do 1. kasne ako nisu plaćeni, porez do 15. ima rok", () => {
+  const L = derive({ tx: [], receipts: [man("2026-11-15", "porez", 22000)] });
+  const c0 = { ...cfg, start: "2026-10-01" };
+  const st = fixedStatus(c0, L, "2026-11-03");
+  assert.equal(st.find(f => f.name === "Računi").status, "late");
+  assert.equal(st.find(f => f.name === "Računi").daysLate, 2);
+  assert.equal(st.find(f => f.name === "Porez").status, "open");
+  assert.equal(fixedStatus(c0, L, "2026-11-13").find(f => f.name === "Porez").status, "soon");
+  assert.equal(fixedStatus(c0, L, "2026-11-15").find(f => f.name === "Porez").status, "paid");
+});
+
+test("limiti: predlog iz potrošnje, deo za nedelju, upozorenje kad se probije", () => {
+  const receipts = [man("2026-11-02", "izlasci", 9000), man("2026-11-05", "izlasci", 9000), man("2026-11-03", "cigarete", 3000)];
+  const L = derive({ tx: [], receipts });
+  const lim = suggestLimits(cfg, L, "2026-11-15", "2026-11-02");
+  assert.ok(lim.izlasci > lim.cigarete);
+  const week = categoryLimits({ izlasci: 30000 }, L, "2026-11-02", "2026-11-08", cfg)[0];
+  assert.equal(week.limit, 7000);
+  assert.equal(week.spent, 18000);
+  const ws = planWarnings(cfg, L, receipts, "2026-11-06", null, { izlasci: 15000 });
+  assert.ok(ws.some(w => /Kafići i izlasci: preko limita za 3000/.test(w.title)));
+});
+
+test("novac do kraja meseca: stanje plus uplate koje stižu, minus neplaćeno, štednja i život", () => {
+  const L = derive({ tx: [], receipts: [] });
+  const F = monthForecast(cfg, L, [], "2026-11-10", 50000);
+  assert.equal(F.incoming, 100000);                     // 15.; uplata poslednjeg dana je za sledeći mesec
+  assert.equal(F.unpaid, 61000);
+  assert.equal(F.unsaved, 30000);
+  assert.ok(F.gap < 0);
+});
+
+test("obaveze i limiti ne kasne pre nego što je plan napravljen", () => {
+  const c = { ...cfg, start: "2026-10-31" };
+  const L = derive({ tx: [], receipts: [man("2026-10-20", "izlasci", 50000)] });
+  assert.equal(fixedStatus(c, L, "2026-10-31").find(f => f.name === "Računi").status, "before");
+  assert.equal(planWarnings(c, L, [], "2026-10-31", null, { izlasci: 10000 }).filter(w => /limita|kasni/.test(w.title)).length, 0);
+  assert.equal(fixedStatus(c, L, "2026-11-03").find(f => f.name === "Računi").status, "late");
+});
