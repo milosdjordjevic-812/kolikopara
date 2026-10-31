@@ -112,7 +112,7 @@ function renderAuth(mode = "in", err = "") {
 async function load() {
   try { S.data = await loadAll(); S.ready = true; S.loadError = null; }
   catch (e) { console.error(e); S.loadError = "Podaci se nisu učitali. Proveri internet."; }
-  if (!S.period) { const ks = periods(); const cur = today().slice(0, 7); S.period = ks.includes(cur) ? cur : (ks[ks.length - 1] || "sve"); }
+  if (!S.period) S.period = "nedelja";
   render();
 }
 let cache = null;
@@ -120,9 +120,29 @@ function list() {
   if (!cache) { const L = derive(S.data); cache = L.concat(stanjeGaps(S.data.receipts, L)).sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0)); }
   return cache;
 }
-function changed() { cache = null; render(); }
+function changed() { cache = null; trackCache = null; render(); }
 function periods() { return [...new Set(list().map(e => e.d.slice(0, 7)))].sort(); }
-const inPeriod = e => S.period === "sve" || e.d.startsWith(S.period);
+// od kada se app koristi: prvi račun, ručni unos ili upisano stanje (stariji izvod iz banke je istorija)
+let trackCache = null;
+function trackStart() {
+  if (trackCache) return trackCache;
+  const skip = new Set(["profil", "cilj", "plan", "budzet"]);
+  const ds = S.data.receipts.filter(r => !skip.has(r.cat)).map(r => String(r.issued_at).slice(0, 10)).sort();
+  const L = list();
+  return (trackCache = ds[0] || (L.length ? L[L.length - 1].d : today()));
+}
+const mondayOf = d => { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - (t.getUTCDay() + 6) % 7); return t.toISOString().slice(0, 10); };
+const maxD = (a, b) => (a > b ? a : b);
+// period: nedelja (od ponedeljka), mesec (ovaj, od kad se app koristi), pocetak (od kad se app koristi), ili mesec "YYYY-MM"
+function periodRange(p = S.period) {
+  const td = today();
+  if (p === "nedelja") return [mondayOf(td), td];
+  if (p === "mesec") return [maxD(td.slice(0, 7) + "-01", trackStart()), td];
+  if (p === "pocetak") return [trackStart(), td];
+  if (/^\d{4}-\d{2}$/.test(p)) return [p + "-01", p + "-31"];
+  return ["0000-00-00", "9999-99-99"];
+}
+const inPer = () => { const [a, b] = periodRange(); return e => e.d >= a && e.d <= b; };
 const lastBank = () => S.data.tx.reduce((m, r) => (r.d > m ? r.d : m), "");
 
 /* ---------- profil: ime i slika (zapis u tabeli računa, cat = profil) ---------- */
@@ -165,9 +185,9 @@ function installHint() {
   return `<div class="install"><span>Dodaj app na početni ekran: dugme <b>Podeli</b> u Safariju, pa <b>Dodaj na početni ekran</b>.</span><button class="chip" data-dismiss-install aria-label="Zatvori">×</button></div>`;
 }
 function periodChips() {
-  const ks = periods(); if (!ks.length) return "";
   const chip = (id, label) => `<button class="chip" data-period="${id}" aria-pressed="${S.period === id}">${esc(label)}</button>`;
-  return `<div class="periods">${ks.map(k => { const [y, m] = k.split("-"); return chip(k, MONFULL[+m - 1] + " " + y); }).join("")}${chip("sve", "Sve")}</div>`;
+  const cur = today().slice(0, 7), old = periods().filter(k => k < cur).reverse().slice(0, 2);
+  return `<div class="periods">${chip("nedelja", "Ova nedelja")}${chip("mesec", "Ovaj mesec")}${old.map(k => chip(k, MONFULL[+k.slice(5) - 1])).join("")}${chip("pocetak", "Od početka")}</div>`;
 }
 
 /* ---------- pregled ---------- */
@@ -189,8 +209,10 @@ function renderOverview() {
     startWallet();
     return;
   }
-  const L = all.filter(inPeriod), T = totals(L);
-  const ds = L.map(e => e.d).sort(), from = ds[0], to = ds[ds.length - 1];
+  const L = all.filter(inPer()), T = totals(L);
+  const ds = L.map(e => e.d).sort(), [ra, rb] = periodRange(), fixedRange = S.period === "nedelja" || S.period === "mesec" || S.period === "pocetak";
+  const from = fixedRange ? ra : ds[0], to = fixedRange ? rb : ds[ds.length - 1];
+  const partial = S.period === "mesec" && trackStart() > today().slice(0, 8) + "01";
   const span = from ? Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1 : 1;
   const cats = CATS.filter(c => c.kind === "spend" && T.by[c.id] && -T.by[c.id].sum > 0.004).map(c => ({ c, sum: -T.by[c.id].sum, n: T.by[c.id].n })).sort((a, b) => b.sum - a.sum);
   const max = cats.length ? cats[0].sum : 1;
@@ -216,11 +238,11 @@ function renderOverview() {
       <div><div class="label">Potrošeno</div><div class="big num">${money(T.spend)}</div></div>
       <button data-have aria-label="Koliko imaš"><div class="label">Ostalo</div>${b ? `<div class="big num">${b.now < 0 ? "-" : ""}${money(b.now)}</div>` : `<div class="big set">Upiši</div>`}</button>
     </div>
-    <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-income><span class="meta">+ Uplata</span></button><button class="have add" data-go="profil"><span class="meta">Statistika</span></button><button class="have add" data-go="korpa"><span class="meta">Korpa</span></button><button class="have add" data-go="stednja"><span class="meta">Štednja</span></button></div>
+    <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-income><span class="meta">+ Uplata</span></button>${budzetCfg() ? `<button class="have add" data-go="plan"><span class="meta">Plan</span></button>` : ""}<button class="have add" data-go="profil"><span class="meta">Statistika</span></button><button class="have add" data-go="korpa"><span class="meta">Korpa</span></button><button class="have add" data-go="stednja"><span class="meta">Štednja</span></button></div>
     <div class="wallet" id="wallet"></div>
     <div class="actions"><button class="cta big" data-scan>[ Skeniraj račun ]</button></div>
     ${budzetCfg() ? "" : weekLine()}
-    <p class="sub"><span>${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno</span> ${money((avgSkip() ? totals(L, FIXED).spend : T.spend) / span)} dinara dnevno. <span>Bez prolaznog novca i prenosa između tvojih računa${avgSkip() ? ", bez računa i pretplata" : ""}.</span></p>
+    <p class="sub"><span>${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno</span> ${money((avgSkip() ? totals(L, FIXED).spend : T.spend) / span)} dinara dnevno. <span>Bez prolaznog novca i prenosa između tvojih računa${avgSkip() ? ", bez računa i pretplata" : ""}.${partial ? ` App koristiš od ${esc(dShort(trackStart()))}, pa mesec nije pun.` : ""}</span></p>
     ${avgChips()}
   </div>
   <div class="strip">
@@ -289,7 +311,7 @@ function rowHtml(e, focus) {
 }
 function renderList() {
   const q = upper(S.q.trim());
-  const L = list().filter(inPeriod).filter(e => (!S.cat || e.parts.some(p => p.cat === S.cat)) &&
+  const L = list().filter(inPer()).filter(e => (!S.cat || e.parts.some(p => p.cat === S.cat)) &&
     (!q || upper(e.t).includes(q) || upper(e.person || "").includes(q) || (e.receipt?.items || []).some(i => upper(i.name).includes(q))));
   const days = {}; for (const e of L) (days[e.d] ||= []).push(e);
   const sum = L.reduce((s, e) => s + (S.cat ? e.parts.filter(p => p.cat === S.cat).reduce((a, p) => a + p.amount, 0) : e.amount), 0);
@@ -310,7 +332,7 @@ function renderList() {
 /* ---------- prolazno ---------- */
 function renderPass() {
   const people = {};
-  for (const e of list().filter(inPeriod)) for (const p of e.parts) {
+  for (const e of list().filter(inPer())) for (const p of e.parts) {
     if (p.cat !== "prolazno") continue;
     const k = p.person || "Bez imena"; (people[k] ||= { in: 0, out: 0, items: [] });
     if (p.amount > 0) people[k].in += p.amount; else people[k].out += -p.amount;
@@ -447,14 +469,21 @@ function barChart(data, { label, avg = null, id }) {
 }
 const MON3 = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "avg", "sep", "okt", "nov", "dec"];
 function renderProfile() {
-  const L = list(), td = today(), b = bal(), pr = profRow();
-  const R = rhythm(L, td, avgSkip()), ins = insights(L, td, b), ne = nonEssential(L, td), hb = habits(L, td), cc = categoryCompare(L, td).slice(0, 7);
-  const mode = S.chart || "dani";
+  // statistika samo od kad se app koristi, da prazni dani pre toga ne kvare prosek i grafikone
+  const ts = trackStart(), L = list().filter(e => e.d >= ts), td = today(), b = bal(), pr = profRow();
+  const R = rhythm(L, td, avgSkip()), ins = insights(L, td, b), ne = nonEssential(L, td), hb = habits(L, td);
+  const daysIn = Math.round((Date.parse(td) - Date.parse(ts)) / 864e5) + 1;
+  const pmFirst = (() => { const [y, m] = td.split("-").map(Number); return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, "0")}-01`; })();
+  const fullPrev = ts <= pmFirst;                       // prošli mesec je ceo u appu
+  const cc = fullPrev ? categoryCompare(L, td).slice(0, 7) : [];
+  const total = totals(L, avgSkip()).spend;
+  const modes = [["dani", "Dani"], ["nedelje", "Nedelje"], ...(fullPrev ? [["meseci", "Meseci"]] : [])];
+  const mode = modes.some(m => m[0] === S.chart) ? S.chart : "dani";
   const chart = mode === "nedelje"
-    ? barChart(seriesWeeks(R.daily, td, 10), { id: "ch", label: d => dShort(d.key) })
+    ? barChart(seriesWeeks(R.daily, td, Math.max(1, Math.min(10, Math.ceil((daysIn + (new Date(ts + "T00:00:00Z").getUTCDay() + 6) % 7) / 7)))), { id: "ch", label: d => dShort(d.key) })
     : mode === "meseci"
       ? barChart(seriesMonths(L, td, 6, avgSkip()), { id: "ch", label: d => MON3[+d.key.slice(5) - 1] })
-      : barChart(seriesDays(R.daily, td, 30), { id: "ch", label: d => dShort(d.key), avg: R.avg30 });
+      : barChart(seriesDays(R.daily, td, Math.max(2, Math.min(30, daysIn))), { id: "ch", label: d => dShort(d.key), avg: R.avg30 });
   const ccMax = Math.max(1, ...cc.map(r => Math.max(r.now, r.before)));
   const WD = ["ponedeljkom", "utorkom", "sredom", "četvrtkom", "petkom", "subotom", "nedeljom"];
   const tile = (name, v, cmp) => `<div class="tile"><span class="meta dim">${name}</span><span class="v num">${money(v)}</span>${cmp}</div>`;
@@ -472,24 +501,24 @@ function renderProfile() {
   <section>
     <div class="sec-h"><h2>${icon("ritam", 26)} Ritam</h2><span class="meta dim">Bez prolaznog novca${avgSkip() ? ", računa i pretplata" : ""}</span></div>
     ${avgChips()}
-    ${budgetFacts()}
+    ${budzetCfg() ? "" : budgetFacts()}
     <div class="tiles">
       ${tile("Danas", R.today, cmpLine(R.today, R.avg30, "proseka"))}
       ${tile("Ova nedelja", R.week, cmpLine(R.week, R.lastWeekSame, "prošle"))}
-      ${tile("Ovaj mesec", R.month, R.hasLastMonth ? cmpLine(R.month, R.lastMonthSame, "prošlog") : `<span class="meta dim">Do danas</span>`)}
-      ${tile("Prošli mesec", R.lastMonth, `<span class="meta dim">${R.hasLastMonth ? "Ceo mesec" : "Samo deo meseca u appu"}</span>`)}
+      ${tile("Ovaj mesec", R.month, fullPrev ? cmpLine(R.month, R.lastMonthSame, "prošlog") : `<span class="meta dim">${ts > td.slice(0, 8) + "01" ? "od " + esc(dShort(ts)) : "do danas"}</span>`)}
+      ${fullPrev ? tile("Prošli mesec", R.lastMonth, `<span class="meta dim">Ceo mesec</span>`) : tile("Od početka", total, `<span class="meta dim">od ${esc(dShort(ts))}, ${daysIn} ${daysIn % 10 === 1 && daysIn % 100 !== 11 ? "dan" : "dana"}</span>`)}
     </div>
-    <p class="note">Prosečan dan poslednjih 30 dana: <b>${money(R.avg30)} RSD</b>. Ovim tempom ceo mesec izlazi oko <b>${money(R.projected)} RSD</b>${b ? `, a na kraju meseca ostalo bi oko <b>${money(b.now - (R.projected - R.month))} RSD</b>` : ""}.</p>
+    <p class="note">Prosečan dan ${daysIn < 30 ? `od ${esc(dShort(ts))}` : "poslednjih 30 dana"}: <b>${money(R.avg30)} RSD</b>. Ovim tempom ceo mesec izlazi oko <b>${money(R.projected)} RSD</b>${b ? `, a na kraju meseca ostalo bi oko <b>${money(b.now - (R.projected - R.month))} RSD</b>` : ""}.</p>
   </section>
 
   <section>
     <div class="sec-h"><h2>${icon("grafikon", 26)} Grafikoni</h2></div>
     <div class="wallet wide" data-model="grafikon"></div>
-    <div class="periods" style="margin:18px 0 10px">${[["dani", "30 dana"], ["nedelje", "Nedelje"], ["meseci", "Meseci"]].map(([id, n]) => `<button class="chip" data-chart="${id}" aria-pressed="${mode === id}">${n}</button>`).join("")}</div>
+    <div class="periods" style="margin:18px 0 10px">${modes.map(([id, n]) => `<button class="chip" data-chart="${id}" aria-pressed="${mode === id}">${n}</button>`).join("")}</div>
     ${chart}
-    <p class="note" style="margin-top:6px">${mode === "dani" ? `Isprekidana linija je prosečan dan, ${money(R.avg30)} RSD. Gotovina se računa na dan podizanja.` : mode === "nedelje" ? "Nedelja od ponedeljka. Poslednja je ova, do danas." : "Poslednji mesec je ovaj, do danas."}</p>
+    <p class="note" style="margin-top:6px">${mode === "dani" ? `Svaki stubić je jedan dan od ${esc(dShort(ts))}. Isprekidana linija je prosečan dan, ${money(R.avg30)} RSD. Podignuta gotovina se računa na dan podizanja.` : mode === "nedelje" ? "Svaki stubić je jedna nedelja, od ponedeljka. Poslednja je ova, do danas." : "Svaki stubić je jedan mesec. Poslednji je ovaj, do danas."}</p>
     ${cc.length ? `<div class="cc">
-      <div class="sec-h" style="margin:26px 0 8px"><span class="meta">Ovaj i prošli mesec</span><span class="lg"><i class="a"></i><span class="meta dim">ovaj, do danas</span><i class="b"></i><span class="meta dim">prošli</span></span></div>
+      <div class="sec-h" style="margin:26px 0 8px"><span class="meta">Ovaj mesec do danas i ceo prošli</span><span class="lg"><i class="a"></i><span class="meta dim">ovaj, do danas</span><i class="b"></i><span class="meta dim">prošli</span></span></div>
       ${cc.map(r => `<button class="ccrow" data-cat="${r.id}"><span class="n">${catIcon(r.id, 16)}${esc(catName(r.id))}</span>
         <span class="bars"><i class="a" style="width:${(r.now / ccMax * 100).toFixed(1)}%"></i><i class="b" style="width:${(r.before / ccMax * 100).toFixed(1)}%"></i></span>
         <span class="v num">${money(r.now)}<span class="dim"> / ${money(r.before)}</span></span></button>`).join("")}
