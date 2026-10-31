@@ -7,7 +7,7 @@ import { readStatement, rowsFrom, parseAmt } from "./importer.js";
 import { icon, catIcon } from "./icons.js";
 import { shouldPlayIntro, playIntro } from "./intro.js";
 import { basket, amountText } from "./items.js";
-import { parseSpoken, guessCat } from "./spoken.js";
+import { guessCat } from "./spoken.js";
 import { planNumbers, weekPlan, monthPlan, suggestPlan, envelopes } from "./plan.js";
 import { rhythm, seriesDays, seriesWeeks, seriesMonths, categoryCompare, insights, nonEssential, habits, dailyBudget } from "./stats.js";
 
@@ -1157,7 +1157,7 @@ function openScan() {
     <button class="cta shutter" data-shoot>[ Slikaj ]</button><input type="file" id="cam-text" accept="image/*" capture="environment" hidden><div class="flash"></div></div>
   <div class="bottom">
     <div class="modes"><button class="mode" data-mode="qr" aria-pressed="true">Skeniraj QR</button><button class="mode" data-mode="text" aria-pressed="false">Slikaj tekst računa</button></div>
-    <button class="btn" data-manual>Unesi ručno</button><button class="btn" data-voice>${icon("mikrofon", 16)} Izgovori</button>
+    <button class="btn" data-manual>Unesi ručno</button>
   </div>`;
   document.body.appendChild(cam);
   const hint = cam.querySelector("#cam-hint");
@@ -1181,7 +1181,6 @@ function openScan() {
   cam.addEventListener("click", ev => {
     if (ev.target.closest("[data-camclose]")) closeCam();
     if (ev.target.closest("[data-manual]")) { closeCam(); openManual(); }
-    if (ev.target.closest("[data-voice]")) { closeCam(); openManual(false, true); }
     if (ev.target.closest("[data-shoot]")) {
       // slika se pravi iz kamere u appu; ako kamera ne radi, otvara se kamera telefona
       const v = cam.querySelector("video"), p = cam.dataset.nocam ? null : grabFrame(v, cam.querySelector(".frame"));
@@ -1395,9 +1394,9 @@ async function saveOcr() {
   afterSaved(saved);
 }
 
-function openManual(income = false, listen = false) {
-  S.sheet = { kind: "manual", income, cat: "nerazvrstano", payment: income ? "racun" : "kartica", desc: "", amount: "", date: today(), person: "", items: [], said: "", sayNote: "" };
-  sttAvailable(); drawSheet(); if (listen) toggleVoice();
+function openManual(income = false) {
+  S.sheet = { kind: "manual", income, cat: "nerazvrstano", payment: income ? "racun" : "kartica", desc: "", amount: "", date: today(), person: "", items: [] };
+  drawSheet();
 }
 const incomeNames = () => [...new Set(S.data.receipts.filter(r => r.cat === "priliv" && r.merchant).map(r => r.merchant))].sort();
 function drawManual() {
@@ -1406,11 +1405,6 @@ function drawManual() {
   layer.innerHTML = `<div class="scrim" data-close></div>
   <div class="sheet" role="dialog" aria-modal="true"><div class="sheet-in">
     <div class="catgrid"><button class="chip" data-mmode="out" aria-pressed="${!st.income}">Trošak</button><button class="chip" data-mmode="in" aria-pressed="${!!st.income}">Uplata</button></div>
-    <div class="say${st.listening ? " on" : ""}">
-      <button class="saybtn" data-mvoice aria-label="${st.listening ? "Završi" : "Izgovori"}">${icon("mikrofon", 22)}<span>${st.busy ? "Prepoznajem" : st.listening ? "Slušam, dodirni kad završiš" : "Izgovori"}</span></button>
-      <input id="m-say" value="${esc(st.said || "")}" placeholder="${st.income ? "npr. Akka studio uplata 100000" : "npr. Ambar 4500"}" enterkeyhint="done" autocomplete="off" aria-label="Unos rečenicom">
-      ${st.sayNote ? `<p class="note">${esc(st.sayNote)}</p>` : ""}
-    </div>
     ${st.income ? drawIncomeFields(st) : !st.more && !its.length ? drawQuick(st) : `<h3>Trošak bez računa</h3>
     <div class="map">
       <div class="field"><label class="meta" for="m-desc">Na šta ili gde</label><input id="m-desc" value="${esc(st.desc)}" placeholder="npr. pijaca, frizer" autocomplete="off"><div class="sugg" id="m-sugg"></div></div>
@@ -1476,7 +1470,6 @@ function readManual() {
   const st = S.sheet;
   const g = id => document.getElementById(id);
   if (g("m-desc")) st.desc = g("m-desc").value; if (g("m-amt")) st.amount = g("m-amt").value; if (g("m-date")) st.date = g("m-date").value; if (g("m-person")) st.person = g("m-person").value.trim();
-  if (g("m-say")) st.said = g("m-say").value;
   layer.querySelectorAll("[data-mname]").forEach(el => { const it = st.items[+el.dataset.mname]; if (it) it.name = el.value.trim(); });
   layer.querySelectorAll("[data-mamt]").forEach(el => { const it = st.items[+el.dataset.mamt]; if (it) it.total = el.value.trim(); });
 }
@@ -1517,104 +1510,6 @@ function pickSugg(i) {
   document.getElementById("m-amt")?.focus();
 }
 const redrawKeep = () => { const sh = layer.querySelector(".sheet"), y = sh ? sh.scrollTop : 0; drawSheet(); const n = layer.querySelector(".sheet"); if (n) n.scrollTop = y; };
-
-// rečenica (izgovorena ili napisana) popunjava polja; korisnik proveri pa sačuva
-function applySaid(text) {
-  const st = S.sheet; if (!st || st.kind !== "manual") return;
-  const r = parseSpoken(text, { incomeNames: incomeNames(), rules: S.data.rules });
-  st.said = text;
-  if (!r.desc && r.amount == null) { st.sayNote = "Nisam razumeo. Probaj ovako: pijaca, paradajz 230, krastavac 120."; return; }
-  st.income = r.income;
-  if (r.desc) st.desc = r.desc;
-  if (r.income) st.pass = !!r.pass;
-  st.amount = r.amount != null ? amtStr(r.amount) : "";
-  st.payment = r.payment || (r.income ? "racun" : st.payment === "racun" && !r.income ? "gotovina" : st.payment);
-  st.date = r.dayOffset ? dstrBack(today(), -r.dayOffset) : today();
-  if (!r.income) { st.items = r.items.map(i => ({ name: i.name, total: amtStr(i.total), qty: i.qty })); if (r.pass) st.cat = "prolazno"; else if (r.cat) st.cat = r.cat; }
-  st.sayNote = r.income ? "Proveri ime i iznos, pa sačuvaj." : r.items.length ? `Upisano ${stavki(r.items.length)}. Proveri pa sačuvaj.` : "Proveri pa sačuvaj.";
-}
-
-/*
- * Glas. Na iPhoneu, u appu dodatom na početni ekran, ugrađeno prepoznavanje (SpeechRecognition) često postoji
- * ali ništa ne radi, pa je prvi izbor snimak koji prepoznaje server (/api/transcribe). Ako server nema ključ,
- * probaj ugrađeno, sa čuvarem vremena; ako ni to ne krene, ostaje mikrofon na tastaturi.
- */
-let rec = null, sttOk = null;
-const VOICE_FAIL = "Mikrofon u appu ne radi na ovom telefonu. Dodirni polje iznad, pa mikrofon na tastaturi, izgovori i dodirni Gotovo.";
-async function sttAvailable() {
-  if (sttOk !== null) return sttOk;
-  try { const r = await fetch("/api/transcribe", { cache: "no-store" }); sttOk = r.ok && !!(await r.json()).ok; } catch (_) { sttOk = false; }
-  return sttOk;
-}
-function voiceDone(st, text, err) {
-  rec = null;
-  if (S.sheet !== st) return;
-  st.listening = false; st.busy = false;
-  if (text) applySaid(text); else if (err) st.sayNote = err;
-  redrawKeep();
-  if (!text && err === VOICE_FAIL) document.getElementById("m-say")?.focus();
-}
-async function toggleVoice() {
-  const st = S.sheet; if (!st || st.busy) return;
-  if (rec) { rec.finish(); return; }
-  readManual();
-  st.listening = true; st.sayNote = ""; redrawKeep();
-  if (window.MediaRecorder && navigator.mediaDevices?.getUserMedia && await sttAvailable()) return recordVoice(st);
-  speechVoice(st);
-}
-
-// snimak, pa tekst sa servera
-async function recordVoice(st) {
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch (_) { voiceDone(st, "", "Mikrofon nije dozvoljen. Dozvoli ga u podešavanjima telefona za ovaj app, ili koristi mikrofon na tastaturi."); return; }
-  const type = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find(t => MediaRecorder.isTypeSupported?.(t)) || "";
-  const mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined), chunks = [];
-  const stopAll = () => stream.getTracks().forEach(t => t.stop());
-  const limit = setTimeout(() => rec && rec.finish(), 30000);
-  rec = { finish: () => { clearTimeout(limit); if (mr.state !== "inactive") mr.stop(); } };
-  mr.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
-  mr.onstop = async () => {
-    stopAll(); rec = null;
-    if (S.sheet !== st) return;
-    st.listening = false; st.busy = true; st.sayNote = "Prepoznajem..."; redrawKeep();
-    try {
-      const blob = new Blob(chunks, { type: mr.mimeType || type || "audio/mp4" });
-      const b64 = await new Promise((ok, bad) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(",")[1] || ""); fr.onerror = bad; fr.readAsDataURL(blob); });
-      const r = await fetch("/api/transcribe", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + (S.session?.access_token || "") }, body: JSON.stringify({ audio: b64, type: blob.type }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) { voiceDone(st, "", j.error || "Prepoznavanje nije uspelo. Probaj ponovo."); return; }
-      if (j.text) j.text = latin(j.text); // Whisper ponekad piše ćirilicom
-      if (j.text) { const inp = document.getElementById("m-say"); if (inp) inp.value = j.text; }
-      voiceDone(st, j.text, "Nisam ništa čuo. Dodirni Izgovori i probaj ponovo.");
-    } catch (_) { voiceDone(st, "", "Prepoznavanje nije uspelo. Proveri internet i probaj ponovo."); }
-  };
-  try { mr.start(); } catch (_) { stopAll(); voiceDone(st, "", VOICE_FAIL); }
-}
-
-// ugrađeno prepoznavanje u pregledaču
-function speechVoice(st) {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { voiceDone(st, "", VOICE_FAIL); return; }
-  const go = lang => {
-    const r = new SR();
-    let heard = "", err = "", started = false, ended = false;
-    const end = () => { if (ended) return; ended = true; clearTimeout(wd); voiceDone(st, heard, err || (started ? "Nisam ništa čuo. Dodirni Izgovori i probaj ponovo." : VOICE_FAIL)); };
-    // ako se za 3 s ne javi da sluša, ugrađeno prepoznavanje ovde ne radi
-    const wd = setTimeout(() => { if (!started) { try { r.abort(); } catch (_) {} end(); } }, 3000);
-    rec = { finish: () => { try { r.stop(); } catch (_) {} setTimeout(end, 1500); } };
-    r.lang = lang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-    r.onstart = r.onaudiostart = () => { started = true; };
-    r.onresult = ev => { started = true; heard = [...ev.results].map(x => x[0].transcript).join(" ").trim(); const inp = document.getElementById("m-say"); if (inp) inp.value = heard; };
-    r.onerror = ev => {
-      if (ev.error === "language-not-supported" && lang !== "hr-HR") { ended = true; clearTimeout(wd); go("hr-HR"); return; }
-      err = ev.error === "not-allowed" || ev.error === "service-not-allowed" ? VOICE_FAIL : ev.error === "no-speech" ? "Nisam ništa čuo. Dodirni Izgovori i probaj ponovo." : VOICE_FAIL;
-    };
-    r.onend = end;
-    try { r.start(); } catch (_) { end(); }
-  };
-  go("sr-RS");
-}
 
 async function saveManual() {
   readManual();
@@ -1708,7 +1603,6 @@ layer.addEventListener("click", ev => {
   if (st.kind === "manual") {
     if (t.closest("[data-mmore]")) { readManual(); st.more = true; redrawKeep(); return; }
     const rc = t.closest("[data-recent]"); if (rc) { st.sugg = st.recent; pickSugg(+rc.dataset.recent); return; }
-    if (t.closest("[data-mvoice]")) { toggleVoice(); return; }
     const sg = t.closest("[data-sugg]"); if (sg) { pickSugg(+sg.dataset.sugg); return; }
     const mps = t.closest("[data-mpass]"); if (mps) { readManual(); st.pass = mps.dataset.mpass === "1"; redrawKeep(); return; }
     if (t.closest("[data-madd]")) { readManual(); st.items.push({ name: "", total: "", qty: 1 }); redrawKeep(); const ins = layer.querySelectorAll("[data-mname]"); if (ins.length) ins[ins.length - 1].focus(); return; }
@@ -1739,7 +1633,6 @@ layer.addEventListener("focusin", ev => { if (ev.target.id === "m-desc") showSug
 layer.addEventListener("change", ev => {
   if (S.sheet?.kind === "budzet" && ev.target.closest("[data-bf]")) { readBudzet(); redrawKeep(); return; }
   // rečenica iz polja (napisana ili izdiktirana tastaturom) popuni ostala polja
-  if (ev.target.id === "m-say" && S.sheet?.kind === "manual") { readManual(); if (S.sheet.said.trim()) { applySaid(S.sheet.said.trim()); redrawKeep(); } return; }
   if (S.sheet?.kind === "manual" && ev.target.matches("[data-mamt]")) { readManual(); redrawKeep(); return; }
   if (ev.target.id === "o-retake" && ev.target.files[0]) { startOcr(ev.target.files[0]); return; }
   // zbir artikala se osveži kad se promeni iznos
@@ -1747,7 +1640,7 @@ layer.addEventListener("change", ev => {
     const y = layer.querySelector(".sheet").scrollTop; readOcr(); drawSheet(); layer.querySelector(".sheet").scrollTop = y;
   }
 });
-document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.id === "m-say") { ev.preventDefault(); ev.target.blur(); return; } if (ev.key === "Escape") { if (document.getElementById("cam")) closeCam(); else if (S.sheet) { S.sheet = null; drawSheet(); } } });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") { if (document.getElementById("cam")) closeCam(); else if (S.sheet) { S.sheet = null; drawSheet(); } } });
 
 /* ---------- nova verzija ---------- */
 // Telefon često samo vrati app iz pozadine sa starom verzijom. Kad se app vrati na ekran,
