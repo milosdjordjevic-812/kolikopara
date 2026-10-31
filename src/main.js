@@ -8,7 +8,7 @@ import { icon, catIcon } from "./icons.js";
 import { shouldPlayIntro, playIntro } from "./intro.js";
 import { basket, amountText } from "./items.js";
 import { guessCat } from "./spoken.js";
-import { planNumbers, weekPlan, monthPlan, suggestPlan, envelopes, savingsDue, incomeSaves, cycleMonth, fixedStatus, suggestLimits, categoryLimits, planWarnings, FIXED_DAYS, LIMIT_CATS } from "./plan.js";
+import { planNumbers, weekPlan, monthPlan, suggestPlan, envelopes, savingsDue, incomeKey, incomeSaves, cycleMonth, fixedStatus, suggestLimits, categoryLimits, planWarnings, FIXED_DAYS, LIMIT_CATS } from "./plan.js";
 import { rhythm, seriesDays, seriesWeeks, seriesMonths, categoryCompare, insights, nonEssential, habits, dailyBudget } from "./stats.js";
 
 /* ---------- pomoćne ---------- */
@@ -867,6 +867,14 @@ function openBudzet() {
   base.big = { ...(base.big || {}), amount: amtIn(base.big?.amount) };
   if (!base.incomes.some(x => !x.month)) base.incomes.push({ name: "", day: 1, amount: "" });
   base.skip = base.skip || {};
+  // staro: umanjenje jednako stalnoj uplati znači da ta uplata ne stiže; stari izbori za štednju i fond se brišu
+  for (const [k, v] of Object.entries(base.skip)) base.skip[k] = { missing: v.missing || [] };
+  base.incomes = base.incomes.filter(x => {
+    if (!x.month) return true;
+    const n = sNumOf(x.amount), r = base.incomes.find(y => !y.month && numOf(y.amount) === -n);
+    if (n < 0 && r) { const o = base.skip[x.month] = base.skip[x.month] || { missing: [] }; if (!o.missing.includes(incomeKey(r))) o.missing.push(incomeKey(r)); return false; }
+    return true;
+  });
   { const sv = incomeSaves(cur || normCfg(base)); let k = 0; base.incomes = base.incomes.map(x => x.month ? x : { ...x, save: amtIn(sv[k++]?.save) }); }
   base.fixed = base.fixed.map(f => ({ ...f, day: f.day != null ? f.day : (FIXED_DAYS[(f.cats || [])[0]] || 0) }));
   base.limits = Object.fromEntries(Object.entries(cur?.limits || effLimits(cur || normCfg(base))).map(([k, v]) => [k, amtIn(v)]));
@@ -887,7 +895,7 @@ function normCfg(c) {
     // ukupna štednja je zbir štednje od stalnih uplata
     save: c.save.map((x, i) => ({ id: x.id, name: String(x.name || "").trim() || "Koverta", amount: i === 0 && c.incomes.some(y => !y.month && numOf(y.save) > 0) ? c.incomes.filter(y => !y.month).reduce((a, y) => a + numOf(y.save), 0) : numOf(x.amount) })),
     big: { amount: numOf(c.big.amount), cats: c.big.cats || ["kucaauto", "lekar"] },
-    skip: Object.fromEntries(Object.entries(c.skip || {}).map(([k, v]) => [k, { ...(v.big ? { big: true } : {}), ...(v.saveAmt != null && String(v.saveAmt).trim() !== "" ? { saveAmt: numOf(v.saveAmt) } : v.save ? { save: true } : {}) }]).filter(([, v]) => Object.keys(v).length)),
+    skip: Object.fromEntries(Object.entries(c.skip || {}).map(([k, v]) => [k, (v.missing || []).length ? { missing: v.missing } : {}]).filter(([, v]) => Object.keys(v).length)),
   };
 }
 function readBudzet(only = null) {
@@ -905,7 +913,7 @@ function readBudzet(only = null) {
 // brojevi na vrhu plana, osveže se dok kucaš (bez ponovnog crtanja, da tastatura ne nestane)
 function budzetHead(st) {
   const c = st.cfg, ym = st.ym, NC = normCfg(c), N = planNumbers(NC), NM = planNumbers(NC, ym), mon = MONFULL[+ym.slice(5) - 1];
-  const sk = c.skip[ym] || {}, monthDiff = NM.extra || sk.save || sk.big || (sk.saveAmt != null && String(sk.saveAmt).trim() !== "");
+  const sk = c.skip[ym] || {}, monthDiff = NM.extra || (sk.missing || []).length;
   return {
     week: `${minus(N.week)}${money(N.week)}`,
     note: `Za život ${minus(N.base)}${money(N.base)} mesečno, oko ${money(N.day)} dnevno: hrana, pijaca, izlasci, cigarete, gorivo, izleti, dostava.${monthDiff ? ` <b>Za ${esc(mon)}: ${minus(NM.life)}${money(NM.life)}, oko ${minus(NM.monthWeek)}${money(NM.monthWeek)} nedeljno.</b>` : ""}`,
@@ -952,9 +960,8 @@ function drawBudzet() {
         <input data-bf="incomes.${i}.amount" inputmode="decimal" value="${esc(x.amount)}" placeholder="Iznos">
         ${del("incomes", i)}</div>`).join("")}
       <button class="btn" data-badd="extra">+ Vanredna uplata</button>
-      <div class="brow two"><span class="blab">Štednja u ${esc(mon === "avgust" ? "avgustu" : mon.replace(/ar$/, "ru").replace(/i$/, "u").replace(/j$/, "ju").replace(/t$/, "tu").replace(/l$/, "lu").replace(/n$/, "nu"))}</span><input data-bf="skipamt" inputmode="decimal" value="${esc(sk.saveAmt != null ? sk.saveAmt : sk.save ? "0" : "")}" placeholder="po planu"><span></span></div>
-      <div class="catgrid"><button class="chip" data-bskip="big" aria-pressed="${!!sk.big}">${esc(cap1(mon))} bez fonda</button></div>
-      <p class="note" style="margin:0">Za uplatu koja nije stalna, npr. od Saše. Važi samo za ${esc(mon)}, od dana uplate do kraja meseca, a sledećeg meseca opet važe samo stalne uplate. Upiši deo koji trošiš, a ostatak stavi u štednju. Ako ovog meseca imaš manje nego obično, upiši iznos sa minusom, npr. -20.000.</p>
+      <div class="field"><span class="meta">Ne stiže u ${esc(mon)}</span><div class="catgrid">${c.incomes.filter(x => !x.month).map(x => `<button class="chip" data-bmiss="${esc(incomeKey(x))}" aria-pressed="${(sk.missing || []).includes(incomeKey(x))}">${esc(x.name)}, ${Number(x.day) ? Number(x.day) + "." : "kraj"}</button>`).join("")}</div></div>
+      <p class="note" style="margin:0">Vanredna uplata je ona koja nije stalna, npr. od Saše. Važi samo za ${esc(mon)}, a sledećeg meseca opet važe samo stalne uplate. Ako neka stalna uplata ovog meseca ne stiže, dodirni je gore: tada se za ${esc(mon)} ne računa ni ta uplata, ni štednja od nje, ni fond za kuću i auto. Ako imaš manje nego obično iz drugog razloga, upiši vanrednu uplatu sa minusom, npr. -20.000.</p>
     </div>
 
     <div class="bsec"><span class="meta" id="b-fixed">${budzetHead(st).fixed}</span>
@@ -1739,6 +1746,7 @@ layer.addEventListener("click", ev => {
     if (t.closest("[data-breg]")) { readBudzet(); st.editReg = true; redrawKeep(); return; }
     const bdl = t.closest("[data-bdellim]"); if (bdl) { readBudzet(); delete st.cfg.limits[bdl.dataset.bdellim]; redrawKeep(); return; }
     const bym = t.closest("[data-bym]"); if (bym) { readBudzet(); st.ym = bym.dataset.bym; redrawKeep(); return; }
+    const bms = t.closest("[data-bmiss]"); if (bms) { readBudzet(); const o = st.cfg.skip[st.ym] = { ...(st.cfg.skip[st.ym] || {}) }; const k = bms.dataset.bmiss, a = new Set(o.missing || []); a.has(k) ? a.delete(k) : a.add(k); o.missing = [...a]; redrawKeep(); return; }
     const bsk = t.closest("[data-bskip]"); if (bsk) { readBudzet(); const o = st.cfg.skip[st.ym] = { ...(st.cfg.skip[st.ym] || {}) }; o[bsk.dataset.bskip] = !o[bsk.dataset.bskip]; redrawKeep(); return; }
     const bd = t.closest("[data-bdel]"); if (bd) { readBudzet(); const [k, i] = bd.dataset.bdel.split(":"); st.cfg[k].splice(+i, 1); redrawKeep(); return; }
     if (t.closest("[data-bsave]")) { saveBudzet(); return; }

@@ -39,19 +39,25 @@ export const BIG_CATS = ["kucaauto", "lekar"];
 const dim = ym => { const [y, m] = ym.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
 const extrasOf = (cfg, ym) => (cfg.incomes || []).filter(x => x.month && x.month === ym);
 const skipOf = (cfg, ym) => (ym && cfg.skip && cfg.skip[ym]) || {};
+// stalna uplata se prepoznaje po imenu i danu
+export const incomeKey = x => `${String(x.name || "").trim().toLowerCase()}|${Number(x.day) || 0}`;
+// stalne uplate koje ovog meseca ne stižu: za taj mesec nema ni te uplate, ni štednje od nje, ni fonda
+const missingOf = (cfg, ym) => new Set(skipOf(cfg, ym).missing || []);
 export function planNumbers(cfg, ym = null) {
-  const reg = sum((cfg.incomes || []).filter(x => !x.month)), fixed = sum(cfg.fixed);
+  const regs = (cfg.incomes || []).filter(x => !x.month), miss = missingOf(cfg, ym);
+  const reg = sum(regs), regM = sum(regs.filter(x => !miss.has(incomeKey(x)))), fixed = sum(cfg.fixed);
   const save0 = sum(cfg.save), big0 = Number(cfg.big?.amount) || 0, sk = skipOf(cfg, ym);
   const extra = ym ? sum(extrasOf(cfg, ym)) : 0;
-  // štednja za jedan mesec: iznos (saveAmt) ili bez štednje (save)
-  const save = sk.saveAmt != null ? Number(sk.saveAmt) : sk.save ? 0 : save0, big = sk.big ? 0 : big0;
-  const base = r2(reg - fixed - save0 - big0), life = r2(reg + extra - fixed - save - big);
-  return { inc: r2(reg + extra), reg, extra, fixed, save, big, save0, big0, base, life, week: Math.round(base / WEEKS_PER_MONTH), day: Math.round(base * 12 / 365.25), monthWeek: ym ? Math.round(life / dim(ym) * 7) : Math.round(base / WEEKS_PER_MONTH) };
+  // štednja za jedan mesec: bez štednje od uplata koje ne stižu (stari zapisi: saveAmt, save)
+  const saveM = miss.size ? sum(incomeSaves(cfg).filter(x => !miss.has(incomeKey(x))), x => x.save) : save0;
+  const save = sk.saveAmt != null ? Number(sk.saveAmt) : sk.save ? 0 : saveM, big = sk.big || miss.size ? 0 : big0;
+  const base = r2(reg - fixed - save0 - big0), life = r2(regM + extra - fixed - save - big);
+  return { inc: r2(regM + extra), reg, regM, extra, fixed, save, big, save0, big0, base, life, missing: [...miss], week: Math.round(base / WEEKS_PER_MONTH), day: Math.round(base * 12 / 365.25), monthWeek: ym ? Math.round(life / dim(ym) * 7) : Math.round(base / WEEKS_PER_MONTH) };
 }
 // koliko se sme jednog dana: stalni plan (isto svaki dan), plus ono što je ovog meseca drugačije
 export function dayAllowance(cfg, d) {
   const ym = d.slice(0, 7), D = dim(ym), N = planNumbers(cfg, ym), dom = +d.slice(8, 10);
-  let a = N.base * 12 / 365.25 + (N.save0 - N.save + N.big0 - N.big) / D;
+  let a = N.base * 12 / 365.25 + (N.regM - N.reg + N.save0 - N.save + N.big0 - N.big) / D;
   for (const x of extrasOf(cfg, ym)) { const from = Math.min(D, Number(x.day) || D); if (dom >= from) a += Number(x.amount) / (D - from + 1); }
   return a;
 }
@@ -122,7 +128,7 @@ export function monthPlan(cfg, list, receipts, today) {
   const start = (cfg.start || today).slice(0, 7);
   // fond se puni svakog meseca od početka plana, osim meseci kad je preskočen
   let months = 0, bigIn = 0;
-  for (let k = start; k <= ym; k = nextYm(k)) { months++; if (!skipOf(cfg, k).big) bigIn += N.big0; }
+  for (let k = start; k <= ym; k = nextYm(k)) { months++; if (!skipOf(cfg, k).big && !missingOf(cfg, k).size) bigIn += N.big0; }
   const bigCats = cfg.big?.cats || BIG_CATS;
   const TB = totals(list.filter(e => e.d >= (cfg.start || today) && e.d <= today));
   const bigSpent = r2(bigCats.reduce((s, c) => s + (TB.by[c] ? -TB.by[c].sum : 0), 0));
@@ -220,7 +226,8 @@ export function categoryLimits(limits, list, from, to, cfg) {
  */
 export function monthForecast(cfg, list, receipts, today, balanceNow) {
   const ym = today.slice(0, 7), D = dim(ym), dom = domOf(today), N = planNumbers(cfg, ym);
-  const incoming = r2((cfg.incomes || []).filter(x => (!x.month || x.month === ym)).filter(x => { const d = Number(x.day) || D; return d > dom && d < D; }).reduce((s, x) => s + Number(x.amount), 0));
+  const missF = missingOf(cfg, ym);
+  const incoming = r2((cfg.incomes || []).filter(x => (!x.month || x.month === ym) && !(!x.month && missF.has(incomeKey(x)))).filter(x => { const d = Number(x.day) || D; return d > dom && d < D; }).reduce((s, x) => s + Number(x.amount), 0));
   const unpaid = r2(fixedStatus(cfg, list, today).filter(f => f.status !== "before").reduce((s, f) => s + Math.max(0, f.amount - f.paid), 0));
   const env = envelopes(cfg, receipts, today), saved = env.reduce((s, e) => s + e.month, 0);
   const unsaved = Math.max(0, r2(N.save - saved));
@@ -277,7 +284,8 @@ export function incomeSaves(cfg) {
 // i ona za 1. računaju se od početka meseca za štednju), koliko je odvojeno i koliko fali.
 export function savingsDue(cfg, receipts, today) {
   const ym = cycleMonth(today), cd = cycleDay(today), N = planNumbers(cfg, ym);
-  const rows = incomeSaves(cfg).filter(x => x.save > 0).map(x => ({ name: x.name, day: Number(x.day) || 0, save: x.save }));
+  const miss = missingOf(cfg, ym);
+  const rows = incomeSaves(cfg).filter(x => x.save > 0 && !miss.has(incomeKey(x))).map(x => ({ name: x.name, day: Number(x.day) || 0, save: x.save }));
   const cum = rows.filter(x => x.day <= cd).reduce((s, x) => s + x.save, 0);
   const due = Math.min(N.save, cum);
   const saved = envelopes(cfg, receipts, today).reduce((s, e) => s + e.month, 0);

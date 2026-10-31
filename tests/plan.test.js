@@ -178,3 +178,16 @@ test("štednja: 31. se računa kao 1. sledećeg meseca, podsetnik dok nije odvoj
   // redovan mesec: do 14. treba 30.000 (kraj meseca 20.000 i 1. 10.000)
   assert.equal(savingsDue({ ...c, skip: {} }, [], "2026-12-10").due, 30000);
 });
+
+import { incomeKey } from "../src/plan.js";
+
+test("uplata koja ne stiže ovog meseca: bez nje, bez štednje od nje i bez fonda", () => {
+  const c = { ...cfg, save: [{ id: "stednja", name: "Štednja", amount: 40000 }], skip: { "2026-11": { missing: [incomeKey({ name: "Posao B", day: 0 })] } }, incomes: [...cfg.incomes, { name: "Potrošeno ranije", day: 1, amount: -21754, month: "2026-11" }] };
+  const N = planNumbers(c, "2026-11");
+  assert.equal(N.inc, 200000 - 21754);
+  assert.equal(N.save, 20000);
+  assert.equal(N.big, 0);
+  assert.equal(N.life, 200000 - 21754 - 61000 - 20000);
+  assert.equal(savingsDue(c, [], "2026-10-31").due, 10000);
+  assert.equal(planNumbers(c, "2026-12").life, 295000 - 61000 - 40000 - 15000);
+});
