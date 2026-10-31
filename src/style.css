@@ -359,3 +359,16 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 .sugg:empty { display: none }
 .sugg .chip { text-transform: none; letter-spacing: 0; font-size: 14px; box-shadow: inset 0 0 0 1px var(--line); padding: 7px 10px }
 .sugg .chip .dim { margin-left: 4px }
+
+/* plan meseca */
+.bsec { display: grid; gap: 8px }
+.brow { display: grid; grid-template-columns: minmax(0,1fr) 84px 112px 32px; gap: 10px; align-items: end }
+.brow.two { grid-template-columns: minmax(0,1fr) 112px 32px }
+.brow input, .brow select { border: 0; border-bottom: 1px solid var(--ink); background: transparent; padding: 6px 0; border-radius: 0; font-size: 16px; min-width: 0; width: 100%; color: var(--ink) }
+.brow input[inputmode] { text-align: right; font-variant-numeric: tabular-nums }
+.brow .bdel { box-shadow: inset 0 0 0 1px var(--line); padding: 4px 0; justify-content: center }
+.bsec .btn { justify-self: start }
+.hrows .num .chip { margin-left: 6px; padding: 2px 8px; font-size: 12px; box-shadow: inset 0 0 0 1px var(--line) }
+.hrows .warn { color: var(--wine) }
+.budget.hero { margin-top: 22px; gap: 8px }
+.budget.hero .bnum { font-size: clamp(48px, 15vw, 72px); color: var(--band-hi) }

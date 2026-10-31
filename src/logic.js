@@ -15,6 +15,7 @@ export const CATS = [
   { id: "taksi",        name: "Taksi",               kind: "spend" },
   { id: "pretplate",    name: "Pretplate i alati",   kind: "spend" },
   { id: "racuni",       name: "Telefon i računi",    kind: "spend" },
+  { id: "porez",        name: "Porez za firmu",      kind: "spend" },
   { id: "apoteka",      name: "Apoteka i drogerija", kind: "spend" },
   { id: "terapija",     name: "Terapija",            kind: "spend" },
   { id: "lekar",        name: "Lekar i pregledi",    kind: "spend" },
@@ -37,7 +38,8 @@ export const CATS = [
 // zapisi u tabeli računa koji nisu stavke: stanje (koliko imaš na neki dan) i profil (ime i slika)
 // "cilj" je cilj štednje (naziv i iznos); uplate u kasicu su stavke sa kategorijom "stednja"
 // "plan" je datum do kog novac treba da potraje (za Koliko smeš dnevno)
-export const META_CATS = new Set(["stanje", "profil", "cilj", "plan"]);
+// "budzet" je plan meseca (uplate, fiksno, koverte, fond za veće stvari), sačuvan u items[0]
+export const META_CATS = new Set(["stanje", "profil", "cilj", "plan", "budzet"]);
 export const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 export const catName = id => (CAT[id] || CAT.nerazvrstano).name;
 
@@ -50,6 +52,7 @@ const MERCHANT = [
   ["dostava",   /WOLT|GLOVO/],
   ["taksi",     /YANDEX ?GO|CAR:GO|NAXI|PINK TAXI/],
   ["pretplate", /ADOBE|APPLE\.COM|OPENAI|MIDJOURNEY|GOOGLE|FORMIA|SPOTIFY|NETFLIX|FIGMA|NOTION|DROPBOX|POLAR\*|PADDLE|LEMON ?SQUEEZY|DETAILS[ -.]SO/],
+  ["porez",     /PORESK[AE] UPRAV|\bPOREZ\b|POREZ NA|JAVNI(H)? PRIHOD|DOPRINOS|PAU[ŠS]ALN/],
   ["racuni",    /YETTEL|A1 SRBIJA|TELEKOM|\bMTS\b|\bSBB\b|\bEPS\b|ELEKTROPRIVREDA|INFOSTAN|BEOGRADSKE ELEKTRANE|VODOVOD/],
   ["market",    /UNIVEREXPORT|MAXI|C MARKET|LIDL|SVEZE VOCE|SVEŽE VOĆE|THE PIJAC|AMAN DOO|\bIDEA\b|TEMPO|RODA|PERSPEKTIVA|DELHAIZE|MERCATOR/],
   ["pekara",    /PEKAR|BAKERY|HLEB I KIFLE|MLINAR|KIFLICA|PECIVA|BUREKD[ŽZ]IJ|BURE[ĆC]ARA|[ŠS]TRUDLA/],
@@ -253,7 +256,7 @@ function itemParts(rules, items, amount, base, sign) {
 
 /* Zbirovi za period. Gotovina se umanjuje za račune plaćene gotovinom. */
 // stalni mesečni troškovi: računi (i porez) i pretplate; mogu da se izostave iz prosečne potrošnje
-export const FIXED = new Set(["racuni", "pretplate"]);
+export const FIXED = new Set(["racuni", "pretplate", "porez"]);
 // skip: kategorije koje se ne računaju u potrošnju (gotovina plaćena za njih i dalje objašnjava podignut novac)
 export function totals(list, skip = null) {
   const by = {}; let bankSpend = 0, inc = 0, W = 0, C = 0, Ck = 0, feeConv = 0, Sdep = 0, Snet = 0;

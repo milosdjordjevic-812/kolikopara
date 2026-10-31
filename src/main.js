@@ -8,6 +8,7 @@ import { icon, catIcon } from "./icons.js";
 import { shouldPlayIntro, playIntro } from "./intro.js";
 import { basket, amountText } from "./items.js";
 import { parseSpoken, guessCat } from "./spoken.js";
+import { planNumbers, weekPlan, monthPlan, suggestPlan, envelopes } from "./plan.js";
 import { rhythm, seriesDays, seriesWeeks, seriesMonths, categoryCompare, insights, nonEssential, habits, dailyBudget } from "./stats.js";
 
 /* ---------- pomoćne ---------- */
@@ -39,7 +40,7 @@ function applyTheme(t) {
   if (t === "svetla") root.dataset.theme = "light"; else if (t === "tamna") root.dataset.theme = "dark"; else delete root.dataset.theme;
   const dark = t === "tamna" || (t === "sistem" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.remove());
-  const m = document.createElement("meta"); m.name = "theme-color"; m.content = ["pregled", "profil", "stednja"].includes(S.view) ? "#2c110c" : dark ? "#2c110c" : "#fffad8";
+  const m = document.createElement("meta"); m.name = "theme-color"; m.content = ["pregled", "profil", "stednja", "plan"].includes(S.view) ? "#2c110c" : dark ? "#2c110c" : "#fffad8";
   document.head.appendChild(m);
 }
 function setTheme(t) { try { localStorage.setItem("kp-theme", t); } catch (_) {} applyTheme(t); }
@@ -137,11 +138,11 @@ function render() {
   tabbar(true);
   stopWallet(); applyTheme(getTheme()); app.classList.remove("is-empty");
   if (!S.ready) { app.innerHTML = `<div class="top"><div class="logo">[kolko para?]</div></div><div class="empty" style="margin-top:40px"><span class="meta dim">${esc(S.loadError || "Učitavam")}</span></div>`; return; }
-  const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore, profil: renderProfile, korpa: renderBasket, stednja: renderSavings, dan: renderDay }[S.view] || renderOverview;
+  const v = { pregled: renderOverview, stavke: renderList, prolazno: renderPass, vise: renderMore, profil: renderProfile, korpa: renderBasket, stednja: renderSavings, dan: renderDay, plan: renderPlan }[S.view] || renderOverview;
   v();
 }
 function header() {
-  return `<div class="top"><div class="logo">[kolko para?]</div><div class="topr"><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više", korpa: "Korpa", dan: "Stavke" })[S.view] || "")}</span>${avaBtn()}</div></div>${installHint()}`;
+  return `<div class="top"><div class="logo">[kolko para?]</div><div class="topr"><span class="meta dim">${S.view === "pregled" ? "" : esc(({ stavke: "Stavke", prolazno: "Prolazno", vise: "Više", korpa: "Korpa", dan: "Stavke", plan: "Plan" })[S.view] || "")}</span>${avaBtn()}</div></div>${installHint()}`;
 }
 function tabbar(show) {
   let bar = document.querySelector(".tabbar");
@@ -208,6 +209,7 @@ function renderOverview() {
   app.innerHTML = `<div class="band">
     <div class="top"><div class="logo">[kolko para?]</div>${avaBtn()}</div>
     ${installHint()}
+    ${budzetCfg() ? weekLine(true) : ""}
     ${periodChips()}
     <div style="margin-top:26px"><span class="eyebrow">[${from ? esc(dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
     <div class="duo${(money(T.spend) + (b ? money(b.now) : "")).length > 13 ? " long" : ""}">
@@ -217,7 +219,7 @@ function renderOverview() {
     <div class="haverow"><button class="have add" data-income><span class="meta">+ Uplata</span></button><button class="have add" data-go="profil"><span class="meta">Statistika</span></button><button class="have add" data-go="korpa"><span class="meta">Korpa</span></button><button class="have add" data-go="stednja"><span class="meta">Štednja</span></button></div>
     <div class="wallet" id="wallet"></div>
     <div class="actions"><button class="cta big" data-scan>[ Skeniraj račun ]</button></div>
-    ${budgetLine()}
+    ${budzetCfg() ? "" : weekLine()}
     <p class="sub"><span>${span} ${span % 10 === 1 && span !== 11 ? "dan" : "dana"}, prosečno</span> ${money((avgSkip() ? totals(L, FIXED).spend : T.spend) / span)} dinara dnevno. <span>Bez prolaznog novca i prenosa između tvojih računa${avgSkip() ? ", bez računa i pretplata" : ""}.</span></p>
     ${avgChips()}
   </div>
@@ -704,6 +706,160 @@ async function savePlan(auto) {
   S.data.receipts.push({ ...saved, created_at: saved.created_at || new Date().toISOString() }); S.sheet = null; drawSheet(); render();
 }
 
+/* ---------- plan meseca: nedeljni iznos, koverte, fond za veće stvari (zapis cat = budzet) ---------- */
+function budzetRow() { return S.data.receipts.filter(r => r.cat === "budzet").sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || ""))).pop(); }
+function budzetCfg() { const r = budzetRow(), c = r && Array.isArray(r.items) ? r.items[0] : null; return c && Array.isArray(c.incomes) ? c : null; }
+const envTotals = () => { const c = budzetCfg(); return c ? envelopes(c, S.data.receipts, today()) : []; };
+const minus = n => (n < 0 ? "-" : "");
+function weekLine(hero = false) {
+  const cfg = budzetCfg();
+  if (!cfg) return `<button class="budget" data-budzet><span class="label">Plan meseca</span><span class="bnum">Napravi plan</span><span class="meta">koliko smeš nedeljno, a da ostane i za koverte</span></button>`;
+  const w = weekPlan(cfg, list(), today());
+  return `<button class="budget${hero ? " hero" : ""}" data-go="plan"><span class="label">Ove nedelje još</span><span class="bnum num">${minus(w.left)}${money(w.left)}</span><span class="meta">${w.left > 0 ? `danas još ${money(Math.max(0, w.todayLeft))}, ` : "nedelja je potrošena, "}nedelja traje do ${esc(dShort(w.to))}</span></button>`;
+}
+function renderPlan() {
+  const cfg = budzetCfg();
+  if (!cfg) { S.view = "pregled"; render(); openBudzet(); return; }
+  const L = list(), td = today(), w = weekPlan(cfg, L, td), m = monthPlan(cfg, L, S.data.receipts, td);
+  const pct = w.avail > 0 ? Math.min(100, Math.max(0, w.spent / w.avail * 100)) : 100;
+  const catMax = w.cats[0]?.sum || 1;
+  // ostatak prošle nedelje, ako ove nedelje još nije ništa stavljeno u koverte
+  const putThisWeek = S.data.receipts.filter(r => r.cat === "stednja" && !r.refund && String(r.issued_at).slice(0, 10) >= w.from).reduce((s, r) => s + Math.abs(Number(r.total) || 0), 0);
+  const lastLeft = w.last && w.last.left >= 1 && putThisWeek < w.last.left ? Math.round(w.last.left - putThisWeek) : 0;
+  const env = m.envelopes;
+  app.innerHTML = `<div class="band prof">
+    <div class="top"><div class="logo">[kolko para?]</div>${avaBtn()}</div>
+    <div class="label">Ove nedelje još</div>
+    <h1 class="num">${minus(w.left)}${money(w.left)}<span class="rsd">RSD</span></h1>
+    <p class="sub"><span>Od</span> ${money(w.avail)} <span>potrošeno</span> ${money(w.spent)}<span>, nedelja traje do</span> ${esc(dShort(w.to))}</p>
+    <div class="goalbar" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct.toFixed(1)}%"></i></div>
+    <p class="sub">${w.left > 0 ? `<span>To je</span> ${money(w.perDay)} <span>dnevno do kraja nedelje, danas još</span> ${money(Math.max(0, w.todayLeft))}` : `<span>Prešao si nedelju za</span> ${money(-w.left)}<span>, toliko će sledeća biti manja</span>`}</p>
+    ${w.carry < 0 ? `<p class="sub"><span>Ova nedelja je manja za</span> ${money(-w.carry)} <span>zbog prošle</span></p>` : ""}
+    <div class="haverow"><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U kovertu</span></button><button class="have add" data-budzet><span class="meta">Promeni plan</span></button></div>
+  </div>
+
+  ${lastLeft ? `<section>
+    <div class="sec-h"><h2>${icon("kasica", 26)} Ostalo od prošle nedelje</h2></div>
+    <p class="note">Od nedelje do ${esc(dShort(w.last.to))} ostalo ti je <b>${money(lastLeft)}</b> dinara. Podigni ih i stavi u kovertu, da se ne potroše ove nedelje.</p>
+    <div class="row-btns">${env.map(e => `<button class="btn" data-env="${esc(e.id)}" data-amt="${lastLeft}">U kovertu ${esc(e.name)}</button>`).join("")}</div>
+  </section>` : ""}
+
+  <section>
+    <div class="sec-h"><h2>Na šta ove nedelje</h2><span class="meta dim">Bez fiksnog i većih stvari</span></div>
+    ${w.cats.length ? `<div class="rows">${w.cats.map(x => `
+      <button class="crow" data-cat="${x.id}">
+        ${catIcon(x.id, 24)}
+        <span class="name">${esc(catName(x.id))}</span>
+        <span class="amt num">${money(x.sum)}</span>
+        <span class="bar"><i class="${x.id === "gotovina" || x.id === "nerazvrstano" ? "muted" : ""}" style="width:${(x.sum / catMax * 100).toFixed(1)}%"></i></span>
+        <span class="meta dim num">${stavki(x.n)}</span>
+      </button>`).join("")}</div>` : `<p class="note">Ove nedelje još ništa nije potrošeno.</p>`}
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>${icon("kalendar", 26)} Mesec</h2><span class="meta dim">${esc(MONFULL[+td.slice(5, 7) - 1])}</span></div>
+    <div class="hrows">
+      <div><span>Uplate</span><span class="num">${money(m.inc)}</span></div>
+      ${m.fixed.map(f => `<div><span>${esc(f.name)}</span><span class="num${f.paid > f.amount + 0.5 ? " warn" : ""}">${f.paid ? `plaćeno ${money(f.paid)} od ` : ""}${money(f.amount)}</span></div>`).join("")}
+      ${env.map(e => `<div><span>Koverta ${esc(e.name)}</span><span class="num">${money(e.month)} od ${money(e.amount)} ${e.month < e.amount ? `<button class="chip" data-env="${esc(e.id)}" data-amt="${Math.round(e.amount - e.month)}">+ Dodaj</button>` : ""}</span></div>`).join("")}
+      <div><span>Veće stvari, u fondu</span><span class="num">${minus(m.bigLeft)}${money(m.bigLeft)}</span></div>
+      <div><span><b>Za život</b></span><span class="num"><b>${money(m.life)}</b>, ${money(m.week)} nedeljno</span></div>
+    </div>
+    ${m.over.length ? `<p class="note">Van plana: ${m.over.map(o => `${esc(o.name)} ${money(o.over)} preko plana`).join(", ")}. To se ne skida sa nedelje, ali ako se ponavlja, povećaj taj iznos u planu.</p>` : ""}
+    ${m.bigLeft < 0 ? `<p class="note">Fond za veće stvari je u minusu ${money(-m.bigLeft)}. Popuniće se sledećih meseci; ako je hitno, uzmi iz koverte Crni dani.</p>` : ""}
+    <p class="note">Fond za veće stvari se puni ${money(m.big)} mesečno i iz njega ide kuća, auto, lekar i pregledi. Fiksni troškovi i veće stvari se ne broje u nedeljni iznos. Nedelja traje od ponedeljka do nedelje: ako prekoračiš, sledeća je manja za toliko, a ono što ostane staviš u kovertu.</p>
+  </section>
+
+  ${env.some(e => e.total) ? `<section>
+    <div class="sec-h"><h2>${icon("kasica", 26)} Koverte</h2><button class="chip" data-go="stednja">Kasica</button></div>
+    <div class="tiles">${env.map(e => `<div class="tile"><span class="meta dim">${esc(e.name)}</span><span class="v num">${money(e.total)}</span></div>`).join("")}</div>
+  </section>` : ""}`;
+}
+
+// plan: uplate, fiksno, koverte i fond, sa iznosom za nedelju koji se menja dok kucaš
+const amtIn = v => (v === "" || v == null || !Number(v) ? "" : nf0.format(Number(v)));
+function openBudzet() {
+  const cur = budzetCfg(), base = JSON.parse(JSON.stringify(cur || suggestPlan(list(), today())));
+  for (const k of ["incomes", "fixed", "save"]) base[k] = (base[k] || []).map(x => ({ ...x, amount: amtIn(x.amount) }));
+  base.big = { ...(base.big || {}), amount: amtIn(base.big?.amount) };
+  if (!base.incomes.length) base.incomes.push({ name: "", day: 1, amount: "" });
+  S.sheet = { kind: "budzet", cfg: base, isNew: !cur };
+  drawSheet();
+}
+const numOf = v => { const n = parseAmt(v); return isFinite(n) ? Math.abs(Math.round(n)) : 0; };
+function normCfg(c) {
+  const cur = budzetCfg();
+  return {
+    v: 1, start: cur?.start || today(),
+    incomes: c.incomes.map(x => ({ name: String(x.name || "").trim() || "Uplata", day: Number(x.day) || 0, amount: numOf(x.amount) })).filter(x => x.amount > 0),
+    fixed: c.fixed.map(x => ({ name: String(x.name || "").trim() || "Trošak", amount: numOf(x.amount), cats: x.cats || [] })).filter(x => x.amount > 0),
+    save: c.save.map(x => ({ id: x.id, name: String(x.name || "").trim() || "Koverta", amount: numOf(x.amount) })),
+    big: { amount: numOf(c.big.amount), cats: c.big.cats || ["kucaauto", "lekar"] },
+  };
+}
+function readBudzet() {
+  const c = S.sheet.cfg;
+  layer.querySelectorAll("[data-bf]").forEach(el => {
+    const [k, i, f] = el.dataset.bf.split(".");
+    // iznos se odmah prikaže sa tačkama: 15000 -> 15.000
+    let v = el.value; if ((k === "big" || f === "amount") && v.trim()) { const n = parseAmt(v); if (isFinite(n)) v = nf0.format(Math.abs(Math.round(n))); }
+    if (k === "big") c.big.amount = v; else if (c[k] && c[k][+i]) c[k][+i][f] = v;
+  });
+}
+function drawBudzet() {
+  const st = S.sheet, c = st.cfg, N = planNumbers(normCfg(c));
+  const days = [...Array(28)].map((_, i) => i + 1).concat([0]);
+  const del = (k, i) => `<button class="chip bdel" data-bdel="${k}:${i}" aria-label="Ukloni">×</button>`;
+  layer.innerHTML = `<div class="scrim" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true"><div class="sheet-in">
+    <span class="meta dim">${st.isNew ? "Popunjeno iz tvojih podataka, proveri i ispravi" : "Promeni šta treba, nedelja se preračuna"}</span>
+    <h3>Plan meseca</h3>
+    <div><div class="num" style="font-size:40px;font-weight:500;letter-spacing:-.02em;line-height:1">${minus(N.week)}${money(N.week)} <span class="meta dim">RSD nedeljno</span></div>
+    <p class="note" style="margin:8px 0 0">Za život ${minus(N.life)}${money(N.life)} mesečno, oko ${money(N.day)} dnevno: hrana, pijaca, izlasci, cigarete, gorivo, izleti, dostava.</p></div>
+
+    <div class="bsec"><span class="meta">Uplate, ${money(N.inc)}</span>
+      ${c.incomes.map((x, i) => `<div class="brow">
+        <input data-bf="incomes.${i}.name" value="${esc(x.name)}" placeholder="Od koga" autocomplete="off">
+        <select data-bf="incomes.${i}.day" aria-label="Dan u mesecu">${days.map(d => `<option value="${d}" ${Number(x.day) === d ? "selected" : ""}>${d === 0 ? "kraj" : d + "."}</option>`).join("")}</select>
+        <input data-bf="incomes.${i}.amount" inputmode="decimal" value="${esc(x.amount)}" placeholder="Iznos">
+        ${del("incomes", i)}</div>`).join("")}
+      <button class="btn" data-badd="incomes">+ Uplata</button>
+    </div>
+
+    <div class="bsec"><span class="meta">Fiksni troškovi, ${money(N.fixed)}</span>
+      ${c.fixed.map((x, i) => `<div class="brow two">
+        <input data-bf="fixed.${i}.name" value="${esc(x.name)}" placeholder="Naziv" autocomplete="off">
+        <input data-bf="fixed.${i}.amount" inputmode="decimal" value="${esc(x.amount)}" placeholder="Iznos">
+        ${del("fixed", i)}</div>`).join("")}
+      <button class="btn" data-badd="fixed">+ Trošak</button>
+    </div>
+
+    <div class="bsec"><span class="meta">Prvo sebi: koverte, ${money(N.save)}</span>
+      ${c.save.map((x, i) => `<div class="brow two">
+        <input data-bf="save.${i}.name" value="${esc(x.name)}" placeholder="Naziv" autocomplete="off">
+        <input data-bf="save.${i}.amount" inputmode="decimal" value="${esc(x.amount)}" placeholder="Iznos"><span></span></div>`).join("")}
+    </div>
+
+    <div class="bsec"><span class="meta">Fond za veće stvari: kuća, auto, lekar</span>
+      <div class="brow two"><span class="meta dim">Mesečno</span><input data-bf="big" inputmode="decimal" value="${esc(c.big.amount)}" placeholder="Iznos"><span></span></div>
+    </div>
+
+    <p class="note" style="margin:0">Koverte puniš gotovinom istog dana kad stigne uplata. Fiksni troškovi i fond za veće stvari se ne broje u nedeljni iznos.${N.life <= 0 ? " <b>Plan ne izlazi: troškovi i koverte su veći od uplata.</b>" : ""}</p>
+    <div class="row-btns"><button class="cta" data-bsave>[ Sačuvaj plan ]</button><button class="btn" data-close>Otkaži</button></div>
+  </div></div>`;
+}
+async function saveBudzet() {
+  readBudzet();
+  const cfg = normCfg(S.sheet.cfg), N = planNumbers(cfg);
+  if (!cfg.incomes.length) { toast("Upiši bar jednu uplatu"); return; }
+  if (N.life <= 0) { toast("Plan ne izlazi, smanji koverte ili fond"); return; }
+  const row = { kind: "manual", cat: "budzet", refund: false, total: N.life, issued_at: today() + "T12:00:00", merchant: "", store: "", payment: "racun", items: [cfg], person: "" };
+  const saved = await guard(() => insertReceipt(row), "Plan sačuvan");
+  if (!saved) return;
+  S.data.receipts.push({ ...saved, created_at: saved.created_at || new Date().toISOString() });
+  S.sheet = null; drawSheet(); S.view = "plan"; changed(); window.scrollTo(0, 0);
+}
+
 /* ---------- štednja: kasica u gotovini ---------- */
 const meseci = n => n + " " + (n % 10 === 1 && n % 100 !== 11 ? "mesec" : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? "meseca" : "meseci");
 const nedelja = n => n % 10 === 1 && n % 100 !== 11 ? "nedelja" : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? "nedelje" : "nedelja";
@@ -715,6 +871,7 @@ function renderSavings() {
     <div class="label">U kasici</div>
     <h1 class="num">${money(sv.total)}<span class="rsd">RSD</span></h1>
     <p class="sub">${sv.goal ? `<span>${esc(sv.goal.name || "Cilj")}</span> ${money(sv.goal.amount)}<span>, ${sv.left ? "još" : "cilj je pun"}</span> ${sv.left ? money(sv.left) : ""}` : `<span>Gotovina, odvojeno od onoga što trošiš</span>`}</p>
+    ${envTotals().some(e => e.total) ? `<p class="sub">${envTotals().map(e => `<span>${esc(e.name)}</span> ${money(e.total)}`).join("<span>, </span>")}</p>` : ""}
     ${sv.goal ? `<div class="goalbar" role="progressbar" aria-valuenow="${sv.pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${sv.pct}%"></i></div>` : ""}
     <div class="haverow"><button class="have add" data-save-in><span class="meta">+ U kasicu</span></button>${sv.total > 0 ? `<button class="have add" data-save-out><span class="meta">Uzmi iz kasice</span></button>` : ""}<button class="have add" data-goal><span class="meta">${sv.goal ? "Promeni cilj" : "Postavi cilj"}</span></button></div>
     <div class="wallet" data-model="kasica"></div>
@@ -737,13 +894,20 @@ function renderSavings() {
   </section>` : ""}`;
   startWallet();
 }
-function openSave(out) { S.sheet = { kind: "save", out, amount: "", date: today(), note: "" }; drawSheet(); setTimeout(() => document.getElementById("s-amt")?.focus(), 60); }
+function openSave(out, pre = {}) { S.sheet = { kind: "save", out, amount: pre.amount || "", date: today(), note: "", env: pre.env ?? (budzetCfg() ? (budzetCfg().save?.[0]?.id || "") : "") }; drawSheet(); setTimeout(() => document.getElementById("s-amt")?.focus(), 60); }
+function readSave() { const st = S.sheet, g = id => document.getElementById(id); if (!g("s-amt")) return; st.amount = g("s-amt").value; st.date = g("s-date").value || today(); st.note = g("s-note").value; }
+function envChips(st) {
+  const cfg = budzetCfg(); if (!cfg) return "";
+  const envs = [...(cfg.save || []).map(e => [e.id, e.name]), ["", "Kasica, bez koverte"]];
+  return `<div class="field"><span class="meta">Koverta</span><div class="catgrid">${envs.map(([id, n]) => `<button class="chip" data-senv="${esc(id)}" aria-pressed="${(st.env || "") === id}">${esc(n)}</button>`).join("")}</div></div>`;
+}
 function drawSaveSheet() {
   const st = S.sheet, sv = savings(S.data.receipts);
   layer.innerHTML = `<div class="scrim" data-close></div>
   <div class="sheet" role="dialog" aria-modal="true"><div class="sheet-in">
     <span class="meta dim">${st.out ? `U kasici je ${money(sv.total, true)} RSD` : "Gotovina koju odvajaš"}</span>
     <h3>${st.out ? "Iz kasice" : "U kasicu"}</h3>
+    ${envChips(st)}
     <div class="map">
       <label class="field"><span class="meta">Iznos</span><input id="s-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="npr. 2000"></label>
       <label class="field"><span class="meta">Datum</span><input id="s-date" type="date" value="${esc(st.date)}"></label>
@@ -757,8 +921,9 @@ async function saveSave() {
   const amt = Math.abs(parseAmt(g("s-amt").value)); st.date = g("s-date").value || today(); st.note = g("s-note").value.trim();
   if (!isFinite(amt) || amt <= 0) { toast("Upiši iznos"); return; }
   if (st.out && amt > savings(S.data.receipts).total + 0.005) { toast("U kasici nema toliko"); return; }
-  const row = { kind: "manual", cat: "stednja", refund: !!st.out, total: Math.round(amt * 100) / 100, issued_at: st.date + "T12:00:00", merchant: st.note, store: "", payment: "gotovina", items: [], person: "" };
-  const saved = await guard(() => insertReceipt(row), st.out ? "Uzeto iz kasice" : "Stavljeno u kasicu");
+  if (st.out && st.env) { const e = envTotals().find(x => x.id === st.env); if (e && amt > e.total + 0.005) { toast(`U koverti ${e.name} nema toliko`); return; } }
+  const row = { kind: "manual", cat: "stednja", refund: !!st.out, total: Math.round(amt * 100) / 100, issued_at: st.date + "T12:00:00", merchant: st.note, store: st.env || "", payment: "gotovina", items: [], person: "" };
+  const saved = await guard(() => insertReceipt(row), st.out ? "Uzeto iz kasice" : st.env ? "Stavljeno u kovertu" : "Stavljeno u kasicu");
   if (!saved) return;
   S.data.receipts.push(saved); S.sheet = null; drawSheet(); changed();
 }
@@ -868,6 +1033,7 @@ function drawSheet() {
   if (st.kind === "save") return drawSaveSheet();
   if (st.kind === "goal") return drawGoalSheet();
   if (st.kind === "plan") return drawPlanSheet();
+  if (st.kind === "budzet") return drawBudzet();
   if (st.kind === "ocrwait") return drawOcrWait();
   if (st.kind === "ocr") return drawOcr();
   if (st.kind === "have") return drawHave();
@@ -1459,6 +1625,8 @@ app.addEventListener("click", async ev => {
   if (t.closest("[data-save-out]")) { openSave(true); return; }
   if (t.closest("[data-goal]")) { openGoal(); return; }
   if (t.closest("[data-plan]")) { openPlan(); return; }
+  if (t.closest("[data-budzet]")) { openBudzet(); return; }
+  const ev2 = t.closest("[data-env]"); if (ev2) { openSave(false, { env: ev2.dataset.env, amount: ev2.dataset.amt ? nf0.format(+ev2.dataset.amt) : "" }); return; }
   const dy = t.closest("[data-day]"); if (dy) { S.day = dstrBack(today(), +dy.dataset.day); S.view = "dan"; render(); window.scrollTo(0, 0); return; }
   const dsp = t.closest("[data-dstep]"); if (dsp) { const base = S.view === "dan" ? S.day || today() : today(); const n = dstrBack(base, -dsp.dataset.dstep); S.day = n > today() ? today() : n; S.view = "dan"; render(); return; }
   const av = t.closest("[data-avg]"); if (av) { setAvg(av.dataset.avg); const y = window.scrollY; render(); window.scrollTo(0, y); return; }
@@ -1500,6 +1668,12 @@ layer.addEventListener("click", ev => {
   const mc = t.closest("[data-mcat]"); if (mc) { readManual(); st.cat = mc.dataset.mcat; drawSheet(); return; }
   if (t.closest("[data-msave]")) { saveManual(); return; }
   if (t.closest("[data-ssave]")) { saveSave(); return; }
+  const se = t.closest("[data-senv]"); if (se) { readSave(); st.env = se.dataset.senv; drawSheet(); return; }
+  if (st.kind === "budzet") {
+    const ba = t.closest("[data-badd]"); if (ba) { readBudzet(); st.cfg[ba.dataset.badd].push(ba.dataset.badd === "incomes" ? { name: "", day: 1, amount: "" } : { name: "", amount: "", cats: [] }); redrawKeep(); return; }
+    const bd = t.closest("[data-bdel]"); if (bd) { readBudzet(); const [k, i] = bd.dataset.bdel.split(":"); st.cfg[k].splice(+i, 1); redrawKeep(); return; }
+    if (t.closest("[data-bsave]")) { saveBudzet(); return; }
+  }
   if (t.closest("[data-plsave]")) { savePlan(false); return; }
   if (t.closest("[data-plauto]")) { savePlan(true); return; }
   if (t.closest("[data-gsave]")) { saveGoal(false); return; }
@@ -1534,6 +1708,7 @@ layer.addEventListener("click", ev => {
 layer.addEventListener("input", ev => { if (ev.target.id === "m-desc") showSugg(); });
 layer.addEventListener("focusin", ev => { if (ev.target.id === "m-desc") showSugg(); });
 layer.addEventListener("change", ev => {
+  if (S.sheet?.kind === "budzet" && ev.target.closest("[data-bf]")) { readBudzet(); redrawKeep(); return; }
   // rečenica iz polja (napisana ili izdiktirana tastaturom) popuni ostala polja
   if (ev.target.id === "m-say" && S.sheet?.kind === "manual") { readManual(); if (S.sheet.said.trim()) { applySaid(S.sheet.said.trim()); redrawKeep(); } return; }
   if (S.sheet?.kind === "manual" && ev.target.matches("[data-mamt]")) { readManual(); redrawKeep(); return; }
