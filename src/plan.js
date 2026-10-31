@@ -93,7 +93,10 @@ export function weekPlan(cfg, list, today) {
   // na šta je otišlo ove nedelje
   const T = totals(list.filter(e => e.d >= dstr(from) && e.d <= today), outsideCats(cfg));
   const cats = Object.entries(T.by).filter(([id, v]) => CAT[id]?.kind === "spend" && v.sum < -0.004).map(([id, v]) => ({ id, sum: -v.sum, n: v.n })).sort((a, b) => b.sum - a.sum);
-  return { ...N, from: dstr(from), to: dstr(wT + 6), avail, spent, left, carry, daysLeft, perDay, spentToday, todayLeft: r2(perDay - spentToday), last, cats };
+  // po danima ove nedelje: potrošeno i koliko je plan davao za taj dan (prosek nedelje, bez prenosa)
+  const days = [];
+  for (let n = from; n <= wT + 6; n++) days.push({ d: dstr(n), spent: n <= t ? Math.max(0, spentIn(n, n)) : 0, allow: Math.round(dayAllowance(cfg, dstr(n))), future: n > t, today: n === t });
+  return { ...N, from: dstr(from), to: dstr(wT + 6), avail, spent, left, carry, daysLeft, perDay, spentToday, todayLeft: r2(perDay - spentToday), last, cats, days };
 }
 
 // koverte iz kasice: uplate sa oznakom koverte (store), ukupno i ovog meseca

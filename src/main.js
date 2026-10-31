@@ -770,7 +770,16 @@ function weekLine(hero = false) {
   const cfg = budzetCfg();
   if (!cfg) return `<div class="actions"><button class="cta big" data-budzet>[ Napravi plan ]</button></div>`;
   const w = weekPlan(cfg, list(), today());
-  return `<button class="budget${hero ? " hero" : ""}" data-go="plan"><span class="label">Ove nedelje još</span><span class="bnum num">${minus(w.left)}${money(w.left)}</span><span class="meta">${w.left > 0 ? `danas još ${money(Math.max(0, w.todayLeft))}, ` : "nedelja je potrošena, "}nedelja traje do ${esc(dShort(w.to))}</span></button>`;
+  return `<button class="budget${hero ? " hero" : ""}" data-go="plan"><span class="label">Ove nedelje još</span><span class="bnum num">${minus(w.left)}${money(w.left)}</span><span class="meta">nedelja traje do ${esc(dShort(w.to))}</span></button>${hero ? dayStrip(w) : ""}`;
+}
+// danas: koliko smeš (ostatak nedelje podeljen na preostale dane, sa današnjim), potrošeno i ostalo
+function dayStrip(w) {
+  const smes = Math.max(0, w.perDay), ost = w.todayLeft, pct = smes ? Math.min(100, w.spentToday / smes * 100) : 100;
+  return `<div class="daystrip">
+    <div><span class="label">Smeš danas</span><span class="num">${money(smes)}</span></div>
+    <div><span class="label">Potrošeno</span><span class="num">${money(w.spentToday)}</span></div>
+    <div><span class="label">${ost < 0 ? "Preko" : "Ostalo"}</span><span class="num">${money(ost)}</span></div>
+  </div><div class="goalbar"><i style="width:${pct.toFixed(1)}%"></i></div>`;
 }
 function renderPlan() {
   const cfg = budzetCfg();
@@ -788,7 +797,7 @@ function renderPlan() {
     <h1 class="num">${minus(w.left)}${money(w.left)}<span class="rsd">RSD</span></h1>
     <p class="sub"><span>Od</span> ${money(w.avail)} <span>potrošeno</span> ${money(w.spent)}<span>, nedelja traje do</span> ${esc(dShort(w.to))}</p>
     <div class="goalbar" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct.toFixed(1)}%"></i></div>
-    <p class="sub">${w.left > 0 ? `<span>To je</span> ${money(w.perDay)} <span>dnevno do kraja nedelje, danas još</span> ${money(Math.max(0, w.todayLeft))}` : `<span>Prešao si nedelju za</span> ${money(-w.left)}<span>, toliko će sledeća biti manja</span>`}</p>
+    ${w.left > 0 ? dayStrip(w) : `<p class="sub"><span>Prešao si nedelju za</span> ${money(-w.left)}<span>, toliko će sledeća biti manja</span></p>`}
     ${w.carry < 0 ? `<p class="sub"><span>Ova nedelja je manja za</span> ${money(-w.carry)} <span>zbog prošle</span></p>` : ""}
     <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U štednju</span></button></div>
     <div class="actions"><button class="cta big" data-budzet>[ Promeni plan ]</button></div>
@@ -800,6 +809,19 @@ function renderPlan() {
     <p class="note">Od nedelje do ${esc(dShort(w.last.to))} ostalo ti je <b>${money(lastLeft)}</b> dinara. Podigni ih i stavi u kovertu, da se ne potroše ove nedelje.</p>
     <div class="row-btns">${env.map(e => `<button class="btn" data-env="${esc(e.id)}" data-amt="${lastLeft}">${env.length > 1 ? "U kovertu " + esc(e.name) : "Stavi u štednju"}</button>`).join("")}</div>
   </section>` : ""}
+
+  <section>
+    <div class="sec-h"><h2>${icon("kalendar", 26)} Po danima</h2><span class="meta dim">Traka: koliko plan daje za dan</span></div>
+    <div class="rows">${w.days.map(x => { const dn = DOW[new Date(x.d + "T00:00:00Z").getUTCDay()]; return `
+      <button class="crow${x.future ? " future" : ""}" ${x.future ? "disabled" : `data-day="${Math.round((Date.parse(td) - Date.parse(x.d)) / 864e5)}"`}>
+        <span class="nchip">${esc(dn)}</span>
+        <span class="name">${x.today ? "Danas" : esc(dShort(x.d))}</span>
+        <span class="amt num">${x.future ? "" : money(x.spent)}</span>
+        <span class="bar"><i class="${x.spent > x.allow ? "over" : ""}" style="width:${x.future ? 0 : Math.min(100, x.allow ? x.spent / x.allow * 100 : 0).toFixed(1)}%"></i></span>
+        <span class="meta dim num">${x.future ? `plan ${money(x.allow)}` : x.spent > x.allow ? `<span class="late">preko ${money(x.spent - x.allow)}</span> od ${money(x.allow)}` : `${money(x.allow - x.spent)} manje od ${money(x.allow)}`}</span>
+      </button>`; }).join("")}</div>
+    <p class="note">Plan za dan je nedeljni iznos podeljen na 7 dana. Kad jednog dana potrošiš više, ostali dani u nedelji dobiju manje. Dodirni dan da vidiš stavke.</p>
+  </section>
 
   <section>
     <div class="sec-h"><h2>Na šta ove nedelje</h2><span class="meta dim">Bez fiksnog i većih stvari</span></div>

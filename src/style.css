@@ -377,3 +377,9 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 .bar i.over { background: var(--wine) }
 .oblig .late { color: var(--wine); font-weight: 500 }
 .oblig .ok { color: var(--taupe) }
+.daystrip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px auto 0; width: min(420px, 100%); text-align: center }
+.daystrip .label { display: block; margin-top: 0; font-size: 10px; letter-spacing: .14em }
+.daystrip .num { display: block; margin-top: 6px; font-size: 22px; font-weight: 500; letter-spacing: -.02em; color: var(--band-ink) }
+.daystrip > div + div { border-left: 1px solid rgba(255,250,216,.18) }
+.crow.future { opacity: .45; cursor: default }
+.crow .nchip { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--taupe) }
