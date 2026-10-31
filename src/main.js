@@ -216,7 +216,7 @@ function renderOverview() {
       <div><div class="label">Potrošeno</div><div class="big num">${money(T.spend)}</div></div>
       <button data-have aria-label="Koliko imaš"><div class="label">Ostalo</div>${b ? `<div class="big num">${b.now < 0 ? "-" : ""}${money(b.now)}</div>` : `<div class="big set">Upiši</div>`}</button>
     </div>
-    <div class="haverow"><button class="have add" data-income><span class="meta">+ Uplata</span></button><button class="have add" data-go="profil"><span class="meta">Statistika</span></button><button class="have add" data-go="korpa"><span class="meta">Korpa</span></button><button class="have add" data-go="stednja"><span class="meta">Štednja</span></button></div>
+    <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-income><span class="meta">+ Uplata</span></button><button class="have add" data-go="profil"><span class="meta">Statistika</span></button><button class="have add" data-go="korpa"><span class="meta">Korpa</span></button><button class="have add" data-go="stednja"><span class="meta">Štednja</span></button></div>
     <div class="wallet" id="wallet"></div>
     <div class="actions"><button class="cta big" data-scan>[ Skeniraj račun ]</button></div>
     ${budzetCfg() ? "" : weekLine()}
@@ -735,7 +735,7 @@ function renderPlan() {
     <div class="goalbar" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct.toFixed(1)}%"></i></div>
     <p class="sub">${w.left > 0 ? `<span>To je</span> ${money(w.perDay)} <span>dnevno do kraja nedelje, danas još</span> ${money(Math.max(0, w.todayLeft))}` : `<span>Prešao si nedelju za</span> ${money(-w.left)}<span>, toliko će sledeća biti manja</span>`}</p>
     ${w.carry < 0 ? `<p class="sub"><span>Ova nedelja je manja za</span> ${money(-w.carry)} <span>zbog prošle</span></p>` : ""}
-    <div class="haverow"><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U kovertu</span></button><button class="have add" data-budzet><span class="meta">Promeni plan</span></button></div>
+    <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U kovertu</span></button><button class="have add" data-budzet><span class="meta">Promeni plan</span></button></div>
   </div>
 
   ${lastLeft ? `<section>
@@ -1396,7 +1396,7 @@ async function saveOcr() {
 }
 
 function openManual(income = false, listen = false) {
-  S.sheet = { kind: "manual", income, cat: "nerazvrstano", payment: income ? "racun" : "gotovina", desc: "", amount: "", date: today(), person: "", items: [], said: "", sayNote: "" };
+  S.sheet = { kind: "manual", income, cat: "nerazvrstano", payment: income ? "racun" : "kartica", desc: "", amount: "", date: today(), person: "", items: [], said: "", sayNote: "" };
   sttAvailable(); drawSheet(); if (listen) toggleVoice();
 }
 const incomeNames = () => [...new Set(S.data.receipts.filter(r => r.cat === "priliv" && r.merchant).map(r => r.merchant))].sort();
@@ -1408,10 +1408,10 @@ function drawManual() {
     <div class="catgrid"><button class="chip" data-mmode="out" aria-pressed="${!st.income}">Trošak</button><button class="chip" data-mmode="in" aria-pressed="${!!st.income}">Uplata</button></div>
     <div class="say${st.listening ? " on" : ""}">
       <button class="saybtn" data-mvoice aria-label="${st.listening ? "Završi" : "Izgovori"}">${icon("mikrofon", 22)}<span>${st.busy ? "Prepoznajem" : st.listening ? "Slušam, dodirni kad završiš" : "Izgovori"}</span></button>
-      <input id="m-say" value="${esc(st.said || "")}" placeholder="${st.income ? "npr. Akka studio uplata 100000" : "npr. pijaca, paradajz 230, krastavac 120"}" enterkeyhint="done" autocomplete="off" aria-label="Unos rečenicom">
+      <input id="m-say" value="${esc(st.said || "")}" placeholder="${st.income ? "npr. Akka studio uplata 100000" : "npr. Ambar 4500"}" enterkeyhint="done" autocomplete="off" aria-label="Unos rečenicom">
       ${st.sayNote ? `<p class="note">${esc(st.sayNote)}</p>` : ""}
     </div>
-    ${st.income ? drawIncomeFields(st) : `<h3>Trošak bez računa</h3>
+    ${st.income ? drawIncomeFields(st) : !st.more && !its.length ? drawQuick(st) : `<h3>Trošak bez računa</h3>
     <div class="map">
       <div class="field"><label class="meta" for="m-desc">Na šta ili gde</label><input id="m-desc" value="${esc(st.desc)}" placeholder="npr. pijaca, frizer" autocomplete="off"><div class="sugg" id="m-sugg"></div></div>
       <label class="field"><span class="meta">Iznos</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="${isum ? amtStr(isum) : st.lastAmt ? "prošli put " + amtStr(st.lastAmt) : "0"}"></label>
@@ -1433,6 +1433,32 @@ function drawManual() {
     <p class="note" style="margin:0">Gotovina se odbija od podignutog novca. Kartica i sa računa se uparuju sa izvodom, pa se ne računaju dva puta.</p>`}
     <div class="row-btns"><button class="cta" data-msave>[ Sačuvaj ]</button><button class="btn" data-close>Otkaži</button></div>
   </div></div>`;
+}
+// brzi trošak: gde i koliko, kategorija se prepozna sama; artikli i datum su pod Detalji
+const QUICK_CATS = ["izlasci", "market", "pijaca", "pekara", "gorivo", "cigarete", "dostava", "taksi"];
+function quickGuess(st) {
+  if (st.cat && st.cat !== "nerazvrstano") return st.cat;
+  const d = String(st.desc || "").trim();
+  return d ? guessCat({ income: false, desc: d, items: [] }, S.data.rules) : null;
+}
+function drawQuick(st) {
+  st.recent = st.recent || manualHistory(false).filter(x => x.cat !== "prolazno").sort((a, b) => b.n - a.n || (a.last < b.last ? 1 : -1)).slice(0, 6);
+  const g = quickGuess(st), cats = QUICK_CATS.includes(g) || !g ? QUICK_CATS : [g, ...QUICK_CATS];
+  return `<h3>Trošak</h3>
+    ${!st.desc && st.recent.length ? `<div class="field"><span class="meta">Skoro</span><div class="catgrid">${st.recent.map((x, i) => `<button class="chip" data-recent="${i}">${esc(x.name)}</button>`).join("")}</div></div>` : ""}
+    <div class="map">
+      <div class="field"><label class="meta" for="m-desc">Gde</label><input id="m-desc" value="${esc(st.desc)}" placeholder="npr. Ambar, Žabac, frizer" autocomplete="off"><div class="sugg" id="m-sugg"></div></div>
+      <label class="field"><span class="meta">Koliko</span><input id="m-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="${st.lastAmt ? "prošli put " + amtStr(st.lastAmt) : "0"}"></label>
+    </div>
+    <div class="field"><span class="meta">Plaćeno</span><div class="catgrid">${["kartica", "gotovina"].map(p => `<button class="chip" data-mpay="${p}" aria-pressed="${st.payment === p}">${PAYNAME[p]}</button>`).join("")}</div></div>
+    <div class="field"><span class="meta">Kategorija</span><div class="catgrid" id="m-qcats">${cats.map(c => `<button class="chip" data-mcat="${c}" aria-pressed="${g === c}">${catIcon(c, 16)}${esc(catName(c))}</button>`).join("")}<button class="chip" data-mmore>Sve kategorije</button></div></div>
+    <button class="btn" data-mmore style="justify-self:start">Datum, artikli, ostalo</button>`;
+}
+function syncQuickGuess() {
+  const st = S.sheet; if (!st || st.kind !== "manual" || st.income || st.more || (st.cat && st.cat !== "nerazvrstano")) return;
+  const box = document.getElementById("m-qcats"), inp = document.getElementById("m-desc"); if (!box || !inp) return;
+  const g = quickGuess({ ...st, desc: inp.value });
+  box.querySelectorAll("[data-mcat]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mcat === g)));
 }
 function drawIncomeFields(st) {
   return `<h3>Uplata</h3>
@@ -1621,6 +1647,7 @@ app.addEventListener("click", async ev => {
   if (t.closest("[data-scan]")) { openScan(); return; }
   if (t.closest("[data-have]")) { openHave(); return; }
   if (t.closest("[data-income]")) { openManual(true); return; }
+  if (t.closest("[data-expense]")) { openManual(false); return; }
   if (t.closest("[data-save-in]")) { openSave(false); return; }
   if (t.closest("[data-save-out]")) { openSave(true); return; }
   if (t.closest("[data-goal]")) { openGoal(); return; }
@@ -1679,6 +1706,8 @@ layer.addEventListener("click", ev => {
   if (t.closest("[data-gsave]")) { saveGoal(false); return; }
   if (t.closest("[data-gdel]")) { saveGoal(true); return; }
   if (st.kind === "manual") {
+    if (t.closest("[data-mmore]")) { readManual(); st.more = true; redrawKeep(); return; }
+    const rc = t.closest("[data-recent]"); if (rc) { st.sugg = st.recent; pickSugg(+rc.dataset.recent); return; }
     if (t.closest("[data-mvoice]")) { toggleVoice(); return; }
     const sg = t.closest("[data-sugg]"); if (sg) { pickSugg(+sg.dataset.sugg); return; }
     const mps = t.closest("[data-mpass]"); if (mps) { readManual(); st.pass = mps.dataset.mpass === "1"; redrawKeep(); return; }
@@ -1705,7 +1734,7 @@ layer.addEventListener("click", ev => {
   const ei = t.closest("[data-edit-in]"); if (ei) { openEdit(ei.dataset.editIn); return; }
   const mm = t.closest("[data-mmode]"); if (mm) { readManual(); st.income = mm.dataset.mmode === "in"; st.payment = st.income ? "racun" : "gotovina"; drawSheet(); return; }
 });
-layer.addEventListener("input", ev => { if (ev.target.id === "m-desc") showSugg(); });
+layer.addEventListener("input", ev => { if (ev.target.id === "m-desc") { showSugg(); syncQuickGuess(); } });
 layer.addEventListener("focusin", ev => { if (ev.target.id === "m-desc") showSugg(); });
 layer.addEventListener("change", ev => {
   if (S.sheet?.kind === "budzet" && ev.target.closest("[data-bf]")) { readBudzet(); redrawKeep(); return; }
