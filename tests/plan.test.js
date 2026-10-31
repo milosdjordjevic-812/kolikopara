@@ -142,12 +142,12 @@ test("limiti: predlog iz potrošnje, deo za nedelju, upozorenje kad se probije",
   assert.equal(week.limit, 7000);
   assert.equal(week.spent, 18000);
   const ws = planWarnings(cfg, L, receipts, "2026-11-06", null, { izlasci: 15000 });
-  assert.ok(ws.some(w => /Kafići i izlasci: preko limita za 3000/.test(w.title)));
+  assert.ok(ws.some(w => /Kafići i izlasci: preko limita za 3.000/.test(w.title)));
 });
 
 test("novac do kraja meseca: stanje plus uplate koje stižu, minus neplaćeno, štednja i život", () => {
   const L = derive({ tx: [], receipts: [] });
-  const F = monthForecast(cfg, L, [], "2026-11-10", 50000);
+  const F = monthForecast({ ...cfg, start: "2026-10-01" }, L, [], "2026-11-10", 50000);
   assert.equal(F.incoming, 100000);                     // 15.; uplata poslednjeg dana je za sledeći mesec
   assert.equal(F.unpaid, 61000);
   assert.equal(F.unsaved, 30000);
@@ -160,4 +160,21 @@ test("obaveze i limiti ne kasne pre nego što je plan napravljen", () => {
   assert.equal(fixedStatus(c, L, "2026-10-31").find(f => f.name === "Računi").status, "before");
   assert.equal(planWarnings(c, L, [], "2026-10-31", null, { izlasci: 10000 }).filter(w => /limita|kasni/.test(w.title)).length, 0);
   assert.equal(fixedStatus(c, L, "2026-11-03").find(f => f.name === "Računi").status, "late");
+});
+
+import { cycleMonth, incomeSaves, savingsDue } from "../src/plan.js";
+
+test("štednja: 31. se računa kao 1. sledećeg meseca, podsetnik dok nije odvojeno", () => {
+  const c = { ...cfg, save: [{ id: "stednja", name: "Štednja", amount: 40000 }], skip: { "2026-11": { saveAmt: 10000 } } };
+  assert.equal(cycleMonth("2026-10-31"), "2026-11");
+  assert.equal(cycleMonth("2026-10-15"), "2026-10");
+  assert.deepEqual(incomeSaves(c).map(x => x.save), [10000, 10000, 20000]);
+  const sv = savingsDue(c, [], "2026-10-31");
+  assert.equal(sv.ym, "2026-11");
+  assert.equal(sv.due, 10000);
+  const dep = [man("2026-10-31", "stednja", 10000, { store: "stednja", payment: "gotovina" })];
+  assert.equal(savingsDue({ ...c, save: [{ id: "stednja", name: "Štednja", amount: 40000 }] }, dep, "2026-11-01").missing, 0);
+  assert.ok(planWarnings(c, derive({ tx: [], receipts: [] }), [], "2026-10-31", null, {}).some(w => /Stavi 10.000 u štednju/.test(w.title)));
+  // redovan mesec: do 14. treba 30.000 (kraj meseca 20.000 i 1. 10.000)
+  assert.equal(savingsDue({ ...c, skip: {} }, [], "2026-12-10").due, 30000);
 });

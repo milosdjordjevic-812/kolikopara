@@ -7,10 +7,17 @@ import { CAT, totals } from "./logic.js";
 import { dailySpend, dnum, dstr } from "./stats.js";
 
 const r2 = n => Math.round(n * 100) / 100;
+const fmt = n => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 }).format(Math.round(n));
 const sum = (a, f = x => x.amount) => r2((a || []).reduce((s, x) => s + (Number(f(x)) || 0), 0));
 const DAY = 864e5;
 export const WEEKS_PER_MONTH = 365.25 / 12 / 7;
 const nextYm = ym => { const [y, m] = ym.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; };
+/*
+ * Mesec za štednju: poslednja dva dana u mesecu već pripadaju sledećem, jer tada stiže uplata
+ * za sledeći mesec (poslednjeg dana, ili ranije uplaćena za 1.). Ti dani se računaju kao 1.
+ */
+export const cycleMonth = d => { const D = dim(d.slice(0, 7)); return +d.slice(8, 10) >= D - 1 ? nextYm(d.slice(0, 7)) : d.slice(0, 7); };
+export const cycleDay = d => { const D = dim(d.slice(0, 7)); return +d.slice(8, 10) >= D - 1 ? 1 : +d.slice(8, 10); };
 const monday = n => n - ((new Date(n * DAY).getUTCDay() + 6) % 7);
 
 // fiksni troškovi i fond za veće stvari se plaćaju sa strane, ne iz nedeljnog iznosa
@@ -36,7 +43,8 @@ export function planNumbers(cfg, ym = null) {
   const reg = sum((cfg.incomes || []).filter(x => !x.month)), fixed = sum(cfg.fixed);
   const save0 = sum(cfg.save), big0 = Number(cfg.big?.amount) || 0, sk = skipOf(cfg, ym);
   const extra = ym ? sum(extrasOf(cfg, ym)) : 0;
-  const save = sk.save ? 0 : save0, big = sk.big ? 0 : big0;
+  // štednja za jedan mesec: iznos (saveAmt) ili bez štednje (save)
+  const save = sk.saveAmt != null ? Number(sk.saveAmt) : sk.save ? 0 : save0, big = sk.big ? 0 : big0;
   const base = r2(reg - fixed - save0 - big0), life = r2(reg + extra - fixed - save - big);
   return { inc: r2(reg + extra), reg, extra, fixed, save, big, save0, big0, base, life, week: Math.round(base / WEEKS_PER_MONTH), day: Math.round(base * 12 / 365.25), monthWeek: ym ? Math.round(life / dim(ym) * 7) : Math.round(base / WEEKS_PER_MONTH) };
 }
@@ -90,12 +98,12 @@ export function weekPlan(cfg, list, today) {
 
 // koverte iz kasice: uplate sa oznakom koverte (store), ukupno i ovog meseca
 export function envelopes(cfg, receipts, today) {
-  const ym = today.slice(0, 7), rows = receipts.filter(r => r.cat === "stednja");
+  const ym = cycleMonth(today), rows = receipts.filter(r => r.cat === "stednja");
   const v = r => (r.refund ? -1 : 1) * Math.abs(Number(r.total) || 0);
   return (cfg.save || []).map(s => {
     // jedna koverta: sve uplate u kasicu su njene
     const mine = cfg.save.length === 1 ? rows : rows.filter(r => (r.store || "") === s.id);
-    return { ...s, total: sum(mine, v), month: sum(mine.filter(r => !r.refund && String(r.issued_at).startsWith(ym)), v) };
+    return { ...s, total: sum(mine, v), month: sum(mine.filter(r => !r.refund && cycleMonth(String(r.issued_at).slice(0, 10)) === ym), v) };
   });
 }
 
@@ -210,7 +218,7 @@ export function categoryLimits(limits, list, from, to, cfg) {
 export function monthForecast(cfg, list, receipts, today, balanceNow) {
   const ym = today.slice(0, 7), D = dim(ym), dom = domOf(today), N = planNumbers(cfg, ym);
   const incoming = r2((cfg.incomes || []).filter(x => (!x.month || x.month === ym)).filter(x => { const d = Number(x.day) || D; return d > dom && d < D; }).reduce((s, x) => s + Number(x.amount), 0));
-  const unpaid = r2(fixedStatus(cfg, list, today).reduce((s, f) => s + Math.max(0, f.amount - f.paid), 0));
+  const unpaid = r2(fixedStatus(cfg, list, today).filter(f => f.status !== "before").reduce((s, f) => s + Math.max(0, f.amount - f.paid), 0));
   const env = envelopes(cfg, receipts, today), saved = env.reduce((s, e) => s + e.month, 0);
   const unsaved = Math.max(0, r2(N.save - saved));
   const fund = Math.max(0, monthPlan(cfg, list, receipts, today).bigLeft);
@@ -226,21 +234,49 @@ export function monthForecast(cfg, list, receipts, today, balanceNow) {
 export function planWarnings(cfg, list, receipts, today, balanceNow, limits) {
   const out = [], ym = today.slice(0, 7), D = dim(ym), dom = domOf(today);
   for (const f of fixedStatus(cfg, list, today)) {
-    if (f.status === "late") out.push({ level: "warn", icon: "upozorenje", title: `${f.name}: kasni ${f.daysLate} ${f.daysLate === 1 ? "dan" : "dana"}`, text: `Rok je bio ${f.day}. u mesecu. Plaćeno ${Math.round(f.paid)} od ${Math.round(f.amount)}.` });
-    else if (f.status === "soon") out.push({ level: "info", icon: "kalendar", title: `${f.name}: rok ${f.daysTo === 0 ? "je danas" : f.daysTo === 1 ? "je sutra" : `za ${f.daysTo} dana`}`, text: `Plaća se do ${f.day}. u mesecu, ${Math.round(f.amount)} dinara.` });
+    if (f.status === "late") out.push({ level: "warn", icon: "upozorenje", title: `${f.name}: kasni ${f.daysLate} ${f.daysLate === 1 ? "dan" : "dana"}`, text: `Rok je bio ${f.day}. u mesecu. Plaćeno ${fmt(f.paid)} od ${fmt(f.amount)}.` });
+    else if (f.status === "soon") out.push({ level: "info", icon: "kalendar", title: `${f.name}: rok ${f.daysTo === 0 ? "je danas" : f.daysTo === 1 ? "je sutra" : `za ${f.daysTo} dana`}`, text: `Plaća se do ${f.day}. u mesecu, ${fmt(f.amount)} dinara.` });
   }
-  if (balanceNow != null) {
+  // poslednja dva dana u mesecu računica za ovaj mesec više nema smisla, a za sledeći kreće 1.
+  if (balanceNow != null && cycleMonth(today) === ym) {
     const F = monthForecast(cfg, list, receipts, today, balanceNow);
-    if (F.gap < -500) out.push({ level: "warn", icon: "upozorenje", title: `Do kraja meseca fali ${Math.round(-F.gap)}`, text: `Sa novcem koji imaš i uplatama koje još stižu ovog meseca, plan ne dobacuje do kraja meseca. Smanji trošenje ove nedelje, ili u planu upiši umanjenje samo za ovaj mesec.` });
+    if (F.gap < -500) out.push({ level: "warn", icon: "upozorenje", title: `Do kraja meseca fali ${fmt(-F.gap)}`, text: `Sa novcem koji imaš i uplatama koje još stižu ovog meseca, plan ne dobacuje do kraja meseca. Smanji trošenje ove nedelje, ili u planu upiši umanjenje samo za ovaj mesec.` });
   }
+  const sv = savingsDue(cfg, receipts, today);
+  if (sv.missing >= 500) out.push({ level: "warn", icon: "kasica", title: `Stavi ${fmt(sv.missing)} u štednju`, text: `Do danas je trebalo da odvojiš ${fmt(sv.due)} (od uplata: ${sv.from.join(", ")}), a odvojeno je ${fmt(sv.saved)}. Podigni gotovinu, stavi je u kovertu i upiši U štednju.` });
   const w = weekPlan(cfg, list, today);
-  if (w.left < 0) out.push({ level: "warn", icon: "upozorenje", title: `Nedelja je prekoračena za ${Math.round(-w.left)}`, text: `Toliko će sledeća nedelja biti manja.` });
+  if (w.left < 0) out.push({ level: "warn", icon: "upozorenje", title: `Nedelja je prekoračena za ${fmt(-w.left)}`, text: `Toliko će sledeća nedelja biti manja.` });
   // limiti važe od prvog celog meseca plana
   const startedLate = cfg.start && cfg.start.slice(0, 7) === ym && domOf(cfg.start) > 3;
   for (const c of startedLate ? [] : categoryLimits(limits, list, `${ym}-01`, today, cfg)) {
     const m = c.monthly;
-    if (c.spent > m) out.push({ level: "warn", icon: c.id, title: `${CAT[c.id]?.name || c.id}: preko limita za ${Math.round(c.spent - m)}`, text: `Limit za mesec je ${Math.round(m)}, potrošeno ${Math.round(c.spent)}.` });
-    else if (c.spent > m * 0.5 && c.spent > m * (dom / D) * 1.25) out.push({ level: "info", icon: c.id, title: `${CAT[c.id]?.name || c.id}: brže od plana`, text: `Potrošeno ${Math.round(c.spent)} od ${Math.round(m)}, a prošlo je ${Math.round(dom / D * 100)}% meseca. Ovim tempom limit se probija pre kraja meseca.` });
+    if (c.spent > m) out.push({ level: "warn", icon: c.id, title: `${CAT[c.id]?.name || c.id}: preko limita za ${fmt(c.spent - m)}`, text: `Limit za mesec je ${fmt(m)}, potrošeno ${fmt(c.spent)}.` });
+    else if (c.spent > m * 0.5 && c.spent > m * (dom / D) * 1.25) out.push({ level: "info", icon: c.id, title: `${CAT[c.id]?.name || c.id}: brže od plana`, text: `Potrošeno ${fmt(c.spent)} od ${fmt(m)}, a prošlo je ${fmt(dom / D * 100)}% meseca. Ovim tempom limit se probija pre kraja meseca.` });
   }
   return out;
+}
+
+
+/*
+ * Koliko od svake stalne uplate ide u štednju. Ako nije upisano po uplati, ukupna štednja se deli:
+ * po 5.000 zaokruženo na svaku, a ostatak na uplatu sa kraja meseca (ili poslednju).
+ */
+export function incomeSaves(cfg) {
+  const reg = (cfg.incomes || []).filter(x => !x.month);
+  if (reg.some(x => Number(x.save) > 0)) return reg.map(x => ({ ...x, save: Number(x.save) || 0 }));
+  const total = sum(cfg.save), n = reg.length; if (!n) return [];
+  const each = Math.floor(total / n / 5000) * 5000;
+  const end = reg.findIndex(x => !Number(x.day)), k = end >= 0 ? end : n - 1;
+  return reg.map((x, i) => ({ ...x, save: i === k ? total - each * (n - 1) : each }));
+}
+
+// Štednja do danas: koliko je trebalo da se odvoji od uplata koje su stigle (uplata sa kraja meseca
+// i ona za 1. računaju se od početka meseca za štednju), koliko je odvojeno i koliko fali.
+export function savingsDue(cfg, receipts, today) {
+  const ym = cycleMonth(today), cd = cycleDay(today), N = planNumbers(cfg, ym);
+  const rows = incomeSaves(cfg).filter(x => x.save > 0).map(x => ({ name: x.name, day: Number(x.day) || 0, save: x.save }));
+  const cum = rows.filter(x => x.day <= cd).reduce((s, x) => s + x.save, 0);
+  const due = Math.min(N.save, cum);
+  const saved = envelopes(cfg, receipts, today).reduce((s, e) => s + e.month, 0);
+  return { ym, due, saved, missing: Math.max(0, r2(due - saved)), target: N.save, from: rows.filter(x => x.day <= cd).map(x => x.name + (x.day ? ` ${x.day}.` : ", kraj meseca")) };
 }
