@@ -113,3 +113,9 @@ test("samo ovog meseca: umanjenje i mesec bez štednje i fonda", () => {
   const m = monthPlan(c, L, [], "2026-12-05");
   assert.equal(m.bigLeft, 15000);                                                   // novembar preskočen
 });
+
+test("uplatnica za porez (račun trezora 840) ide u Porez za firmu, ostale uplatnice u račune", () => {
+  const ips = (acc, purpose, total) => ({ id: acc + total, kind: "ips", qr_text: `K:PR|V:01|C:1|R:${acc}|N:Primalac|I:RSD${total},00|SF:253|S:${purpose}`, issued_at: "2026-11-14T12:00:00", merchant: "Primalac", store: "", total, payment: "racun", refund: false, items: [], cat: null });
+  const L = derive({ tx: [], receipts: [ips("840000071444411111", "Porez i doprinosi", 22500), ips("160000000012345678", "Infostan za oktobar", 6000)] });
+  assert.deepEqual(L.map(e => e.parts[0].cat).sort(), ["porez", "racuni"]);
+});

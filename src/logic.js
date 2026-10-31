@@ -1,5 +1,5 @@
 // Kategorije, pravila i računanje pregleda. Bez DOM-a, da može da se testira.
-import { latin } from "./shared/fiscal.js";
+import { latin, parseIps } from "./shared/fiscal.js";
 
 export const CATS = [
   { id: "market",       name: "Market i namirnice",  kind: "spend" },
@@ -202,7 +202,12 @@ function receiptBaseCat(rules, rc) {
   const name = [rc.merchant, rc.store].filter(Boolean).join(" ");
   const m = merchantCat(rules, name, -1);
   if (m.cat !== "nerazvrstano") return m.cat;
-  if (rc.kind === "ips") return "racuni";
+  if (rc.kind === "ips") {
+    // porez i doprinosi idu na račun trezora (840-...) ili u svrsi piše porez
+    const ip = parseIps(rc.qr_text || "");
+    if (ip && (/^840/.test(ip.account.replace(/\D/g, "")) || /POREZ|DOPRINOS|PAU[ŠS]AL/i.test(latin(ip.purpose + " " + ip.name)))) return "porez";
+    return "racuni";
+  }
   return "nerazvrstano";
 }
 
