@@ -827,6 +827,7 @@ function renderPlan() {
 }
 
 // plan: uplate, fiksno, koverte i fond, sa iznosom za nedelju koji se menja dok kucaš
+const cap1 = t => t.charAt(0).toUpperCase() + t.slice(1);
 const nextMonth = ym => { const [y, m] = ym.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; };
 const amtIn = v => (v === "" || v == null || !Number(v) ? "" : (Number(v) < 0 ? "-" : "") + nf0.format(Math.abs(Number(v))));
 function openBudzet() {
@@ -871,7 +872,7 @@ function budzetHead(st) {
     week: `${minus(N.week)}${money(N.week)}`,
     note: `Za život ${minus(N.base)}${money(N.base)} mesečno, oko ${money(N.day)} dnevno: hrana, pijaca, izlasci, cigarete, gorivo, izleti, dostava.${monthDiff ? ` <b>Za ${esc(mon)}: ${minus(NM.life)}${money(NM.life)}, oko ${minus(NM.monthWeek)}${money(NM.monthWeek)} nedeljno.</b>` : ""}`,
     reg: `Stalne uplate, svakog meseca, ${money(N.reg)}`,
-    extra: `Samo za jedan mesec${NM.extra ? ", " + (NM.extra < 0 ? "-" : "+") + money(NM.extra) : ""}`,
+    extra: `Vanredno, samo za ${mon}${NM.extra ? ", " + (NM.extra < 0 ? "-" : "+") + money(NM.extra) : ""}`,
     fixed: `Fiksni troškovi, ${money(N.fixed)}`,
     save: `Prvo sebi: štednja, ${money(N.save0)}${N.save0 ? `, za godinu ${money(N.save0 * 12)}` : ""}`,
     bad: N.base <= 0,
@@ -899,19 +900,19 @@ function drawBudzet() {
         <select data-bf="incomes.${i}.day" aria-label="Dan u mesecu">${days.map(d => `<option value="${d}" ${Number(x.day) === d ? "selected" : ""}>${d === 0 ? "kraj" : d + "."}</option>`).join("")}</select>
         <input data-bf="incomes.${i}.amount" inputmode="decimal" value="${esc(x.amount)}" placeholder="Iznos">
         ${del("incomes", i)}</div>`).join("")}
-      <button class="btn" data-badd="incomes">+ Stalna uplata</button>
+      <button class="btn" data-badd="incomes">+ Novi stalni klijent</button>
     </div>
 
     <div class="bsec"><span class="meta" id="b-extra">${budzetHead(st).extra}</span>
-      <div class="catgrid">${[today().slice(0, 7), nextMonth(today().slice(0, 7))].map(k => `<button class="chip" data-bym="${k}" aria-pressed="${ym === k}">${esc(MONFULL[+k.slice(5) - 1])}</button>`).join("")}</div>
+      ${+today().slice(8, 10) >= 25 ? `<div class="catgrid"><span class="meta dim" style="align-self:center">Za mesec</span>${[today().slice(0, 7), nextMonth(today().slice(0, 7))].map(k => `<button class="chip" data-bym="${k}" aria-pressed="${ym === k}">${esc(MONFULL[+k.slice(5) - 1])}</button>`).join("")}</div>` : ""}
       ${c.incomes.map((x, i) => x.month !== ym ? "" : `<div class="brow">
         <input data-bf="incomes.${i}.name" value="${esc(x.name)}" placeholder="npr. Saša, projekat" autocomplete="off">
         <select data-bf="incomes.${i}.day" aria-label="Dan u mesecu">${days.map(d => `<option value="${d}" ${Number(x.day) === d ? "selected" : ""}>${d === 0 ? "kraj" : d + "."}</option>`).join("")}</select>
         <input data-bf="incomes.${i}.amount" inputmode="decimal" value="${esc(x.amount)}" placeholder="Iznos">
         ${del("incomes", i)}</div>`).join("")}
-      <button class="btn" data-badd="extra">+ Samo za ${esc(mon)}</button>
-      <div class="catgrid"><button class="chip" data-bskip="save" aria-pressed="${!!sk.save}">Bez štednje</button><button class="chip" data-bskip="big" aria-pressed="${!!sk.big}">Bez fonda</button></div>
-      <p class="note" style="margin:0">Važi samo za ${esc(mon)}, od dana uplate do kraja meseca. Sledećeg meseca opet važe stalne uplate. Od vanredne uplate upiši deo koji trošiš, a ostatak stavi u štednju. Umanjenje upiši sa minusom, npr. -20.000.</p>
+      <button class="btn" data-badd="extra">+ Vanredna uplata</button>
+      <div class="catgrid"><button class="chip" data-bskip="save" aria-pressed="${!!sk.save}">${esc(cap1(mon))} bez štednje</button><button class="chip" data-bskip="big" aria-pressed="${!!sk.big}">${esc(cap1(mon))} bez fonda</button></div>
+      <p class="note" style="margin:0">Za uplatu koja nije stalna, npr. od Saše. Važi samo za ${esc(mon)}, od dana uplate do kraja meseca, a sledećeg meseca opet važe samo stalne uplate. Upiši deo koji trošiš, a ostatak stavi u štednju. Ako ovog meseca imaš manje nego obično, upiši iznos sa minusom, npr. -20.000.</p>
     </div>
 
     <div class="bsec"><span class="meta" id="b-fixed">${budzetHead(st).fixed}</span>
