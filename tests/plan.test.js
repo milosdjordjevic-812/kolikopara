@@ -165,7 +165,7 @@ test("obaveze i limiti ne kasne pre nego što je plan napravljen", () => {
 import { cycleMonth, incomeSaves, savingsDue } from "../src/plan.js";
 
 test("štednja: 31. se računa kao 1. sledećeg meseca, podsetnik dok nije odvojeno", () => {
-  const c = { ...cfg, save: [{ id: "stednja", name: "Štednja", amount: 40000 }], skip: { "2026-11": { saveAmt: 10000 } } };
+  const c = { ...cfg, start: "2026-10-31", save: [{ id: "stednja", name: "Štednja", amount: 40000 }], skip: { "2026-11": { saveAmt: 10000 } } };
   assert.equal(cycleMonth("2026-10-31"), "2026-11");
   assert.equal(cycleMonth("2026-10-15"), "2026-10");
   assert.deepEqual(incomeSaves(c).map(x => x.save), [10000, 10000, 20000]);
@@ -182,7 +182,7 @@ test("štednja: 31. se računa kao 1. sledećeg meseca, podsetnik dok nije odvoj
 import { incomeKey } from "../src/plan.js";
 
 test("uplata koja ne stiže ovog meseca: bez nje, bez štednje od nje i bez fonda", () => {
-  const c = { ...cfg, save: [{ id: "stednja", name: "Štednja", amount: 40000 }], skip: { "2026-11": { missing: [incomeKey({ name: "Posao B", day: 0 })] } }, incomes: [...cfg.incomes, { name: "Potrošeno ranije", day: 1, amount: -21754, month: "2026-11" }] };
+  const c = { ...cfg, start: "2026-10-31", save: [{ id: "stednja", name: "Štednja", amount: 40000 }], skip: { "2026-11": { missing: [incomeKey({ name: "Posao B", day: 0 })] } }, incomes: [...cfg.incomes, { name: "Potrošeno ranije", day: 1, amount: -21754, month: "2026-11" }] };
   const N = planNumbers(c, "2026-11");
   assert.equal(N.inc, 200000 - 21754);
   assert.equal(N.save, 20000);
@@ -190,4 +190,11 @@ test("uplata koja ne stiže ovog meseca: bez nje, bez štednje od nje i bez fond
   assert.equal(N.life, 200000 - 21754 - 61000 - 20000);
   assert.equal(savingsDue(c, [], "2026-10-31").due, 10000);
   assert.equal(planNumbers(c, "2026-12").life, 295000 - 61000 - 40000 - 15000);
+});
+
+test("štednja se ne traži od uplate koja je stigla pre plana", () => {
+  const c = { ...cfg, start: "2026-10-31", save: [{ id: "stednja", name: "Štednja", amount: 40000 }] };
+  assert.equal(savingsDue(c, [], "2026-10-31").due, 10000);        // samo Posao A za 1., ne uplata sa kraja oktobra
+  assert.equal(savingsDue(c, [], "2026-11-16").due, 20000);
+  assert.equal(savingsDue(c, [], "2026-12-01").due, 30000);        // od decembra i uplata sa kraja meseca
 });

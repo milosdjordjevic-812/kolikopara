@@ -286,8 +286,13 @@ export function savingsDue(cfg, receipts, today) {
   const ym = cycleMonth(today), cd = cycleDay(today), N = planNumbers(cfg, ym);
   const miss = missingOf(cfg, ym);
   const rows = incomeSaves(cfg).filter(x => x.save > 0 && !miss.has(incomeKey(x))).map(x => ({ name: x.name, day: (Number(x.day) || 0) >= 28 ? 0 : Number(x.day) || 0, save: x.save }));  // 28. i kasnije je uplata sa kraja meseca
-  const cum = rows.filter(x => x.day <= cd).reduce((s, x) => s + x.save, 0);
+  // datum uplate u ovom mesecu za štednju (kraj meseca je poslednji dan prethodnog); od uplate koja je
+  // stigla pre nego što je plan napravljen štednja se ne traži
+  const prev = (() => { const [y, m] = ym.split("-").map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`; })();
+  const payDate = x => (x.day ? `${ym}-${String(Math.min(x.day, dim(ym))).padStart(2, "0")}` : `${prev}-${String(dim(prev)).padStart(2, "0")}`);
+  const okRows = rows.filter(x => !cfg.start || payDate(x) > cfg.start);
+  const cum = okRows.filter(x => x.day <= cd).reduce((s, x) => s + x.save, 0);
   const due = Math.min(N.save, cum);
   const saved = envelopes(cfg, receipts, today).reduce((s, e) => s + e.month, 0);
-  return { ym, due, saved, missing: Math.max(0, r2(due - saved)), target: N.save, from: rows.filter(x => x.day <= cd).map(x => x.name + (x.day ? ` ${x.day}.` : ", kraj meseca")) };
+  return { ym, due, saved, missing: Math.max(0, r2(due - saved)), target: N.save, from: okRows.filter(x => x.day <= cd).map(x => x.name + (x.day ? ` ${x.day}.` : ", kraj meseca")) };
 }

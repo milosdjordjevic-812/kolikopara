@@ -867,14 +867,7 @@ function openBudzet() {
   base.big = { ...(base.big || {}), amount: amtIn(base.big?.amount) };
   if (!base.incomes.some(x => !x.month)) base.incomes.push({ name: "", day: 1, amount: "" });
   base.skip = base.skip || {};
-  // staro: umanjenje jednako stalnoj uplati znači da ta uplata ne stiže; stari izbori za štednju i fond se brišu
-  for (const [k, v] of Object.entries(base.skip)) base.skip[k] = { missing: v.missing || [] };
-  base.incomes = base.incomes.filter(x => {
-    if (!x.month) return true;
-    const n = sNumOf(x.amount), r = base.incomes.find(y => !y.month && numOf(y.amount) === -n);
-    if (n < 0 && r) { const o = base.skip[x.month] = base.skip[x.month] || { missing: [] }; if (!o.missing.includes(incomeKey(r))) o.missing.push(incomeKey(r)); return false; }
-    return true;
-  });
+  for (const k of Object.keys(base.skip)) delete base.skip[k];
   { const sv = incomeSaves(cur || normCfg(base)); let k = 0; base.incomes = base.incomes.map(x => x.month ? x : { ...x, save: amtIn(sv[k++]?.save) }); }
   base.fixed = base.fixed.map(f => ({ ...f, day: f.day != null ? f.day : (FIXED_DAYS[(f.cats || [])[0]] || 0) }));
   base.limits = Object.fromEntries(Object.entries(cur?.limits || effLimits(cur || normCfg(base))).map(([k, v]) => [k, amtIn(v)]));
@@ -895,7 +888,7 @@ function normCfg(c) {
     // ukupna štednja je zbir štednje od stalnih uplata
     save: c.save.map((x, i) => ({ id: x.id, name: String(x.name || "").trim() || "Koverta", amount: i === 0 && c.incomes.some(y => !y.month && numOf(y.save) > 0) ? c.incomes.filter(y => !y.month).reduce((a, y) => a + numOf(y.save), 0) : numOf(x.amount) })),
     big: { amount: numOf(c.big.amount), cats: c.big.cats || ["kucaauto", "lekar"] },
-    skip: Object.fromEntries(Object.entries(c.skip || {}).map(([k, v]) => [k, (v.missing || []).length ? { missing: v.missing } : {}]).filter(([, v]) => Object.keys(v).length)),
+    skip: {},
   };
 }
 function readBudzet(only = null) {
@@ -913,7 +906,7 @@ function readBudzet(only = null) {
 // brojevi na vrhu plana, osveže se dok kucaš (bez ponovnog crtanja, da tastatura ne nestane)
 function budzetHead(st) {
   const c = st.cfg, ym = st.ym, NC = normCfg(c), N = planNumbers(NC), NM = planNumbers(NC, ym), mon = MONFULL[+ym.slice(5) - 1];
-  const sk = c.skip[ym] || {}, monthDiff = NM.extra || (sk.missing || []).length;
+  const sk = c.skip[ym] || {}, monthDiff = NM.extra;
   return {
     week: `${minus(N.week)}${money(N.week)}`,
     note: `Za život ${minus(N.base)}${money(N.base)} mesečno, oko ${money(N.day)} dnevno: hrana, pijaca, izlasci, cigarete, gorivo, izleti, dostava.${monthDiff ? ` <b>Za ${esc(mon)}: ${minus(NM.life)}${money(NM.life)}, oko ${minus(NM.monthWeek)}${money(NM.monthWeek)} nedeljno.</b>` : ""}`,
@@ -960,8 +953,8 @@ function drawBudzet() {
         <input data-bf="incomes.${i}.amount" inputmode="decimal" value="${esc(x.amount)}" placeholder="Iznos">
         ${del("incomes", i)}</div>`).join("")}
       <button class="btn" data-badd="extra">+ Vanredna uplata</button>
-      <div class="field"><span class="meta">Ne stiže u ${esc(mon)}</span><div class="catgrid">${c.incomes.filter(x => !x.month).map(x => `<button class="chip" data-bmiss="${esc(incomeKey(x))}" aria-pressed="${(sk.missing || []).includes(incomeKey(x))}">${esc(x.name)}, ${Number(x.day) ? Number(x.day) + "." : "kraj"}</button>`).join("")}</div></div>
-      <p class="note" style="margin:0">Vanredna uplata je ona koja nije stalna, npr. od Saše. Važi samo za ${esc(mon)}, a sledećeg meseca opet važe samo stalne uplate. Ako neka stalna uplata ovog meseca ne stiže, dodirni je gore: tada se za ${esc(mon)} ne računa ni ta uplata, ni štednja od nje, ni fond za kuću i auto. Ako imaš manje nego obično iz drugog razloga, upiši vanrednu uplatu sa minusom, npr. -20.000.</p>
+      
+      <p class="note" style="margin:0">Vanredna uplata je ona koja nije stalna, npr. od Saše. Važi samo za ${esc(mon)}, a sledećeg meseca opet važe samo stalne uplate. Ako u ${esc(mon === "avgust" ? "avgustu" : mon.replace(/ar$/, "ru").replace(/t$/, "tu").replace(/l$/, "lu").replace(/j$/, "ju").replace(/n$/, "nu"))} imaš manje nego obično, upiši iznos sa minusom, npr. -20.000.</p>
     </div>
 
     <div class="bsec"><span class="meta" id="b-fixed">${budzetHead(st).fixed}</span>
