@@ -384,3 +384,5 @@ section h2 .ic { width: .7em; height: .7em; flex: none; stroke-width: 1.6 }
 .crow.future { opacity: .45; cursor: default }
 .crow .nchip { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--taupe) }
 .bmsel { border: 0; border-bottom: 1px solid var(--ink); background: transparent; padding: 8px 0; font-size: 18px; color: var(--ink); justify-self: start; min-width: 200px }
+.comeback { margin: 26px auto 0; max-width: 460px; text-align: center; padding: 20px 0 4px; border-top: 1px solid rgba(255,250,216,.18); border-bottom: 1px solid rgba(255,250,216,.18) }
+.comeback .sub { text-transform: none; letter-spacing: 0; font-size: 15px; line-height: 1.45; color: var(--band-ink) }

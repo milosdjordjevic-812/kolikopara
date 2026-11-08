@@ -246,6 +246,7 @@ function renderOverview() {
     <div class="top"><div class="logo">[kolko para?]</div>${avaBtn()}</div>
     ${installHint()}
     ${budzetCfg() ? weekLine(true) : ""}
+    ${comebackHtml()}
     ${periodChips()}
     <div style="margin-top:26px"><span class="eyebrow">[${from ? esc(from === to ? dShort(from) + from.slice(0, 4) : dShort(from) + " do " + dShort(to) + to.slice(0, 4)) : ""}]</span></div>
     <div class="duo${(money(T.spend) + (b ? money(b.now) : "")).length > 13 ? " long" : ""}">
@@ -704,6 +705,19 @@ async function savePlan(auto) {
   const saved = await guard(() => insertReceipt(row), "Sačuvano");
   if (!saved) return;
   S.data.receipts.push({ ...saved, created_at: saved.created_at || new Date().toISOString() }); S.sheet = null; drawSheet(); render();
+}
+
+// posle pauze od 3 i više dana: ne mora da se rekonstruiše svaki račun, dovoljno je upisati koliko sada imaš
+function comebackHtml() {
+  const skip = new Set(["profil", "cilj", "plan", "budzet"]), td = today();
+  const last = S.data.receipts.filter(r => !skip.has(r.cat)).map(r => String(r.created_at || r.issued_at).slice(0, 10)).sort().pop();
+  const pause = last ? Math.round((Date.parse(td) - Date.parse(last)) / 864e5) : 0;
+  if (pause < 3) return "";
+  return `<div class="comeback">
+    <div class="label">Nastavljamo</div>
+    <p class="sub">${pause} dana ništa nije upisano. Ne moraš da se vraćaš na svaki račun: pogledaj koliko imaš na računu i u novčaniku i upiši to. Sve što je u međuvremenu otišlo app stavi u jednu stavku „Nezabeleženo", i od danas ide ispočetka.</p>
+    <div class="actions"><button class="cta big" data-have-edit>[ Upiši koliko imaš ]</button></div>
+  </div>`;
 }
 
 // početna: upozorenja (svaki put kad se app otvori), obaveze sa rokovima, štednja i fond
@@ -1683,6 +1697,7 @@ app.addEventListener("click", async ev => {
   const e = t.closest("[data-edit]"); if (e) { openEdit(e.dataset.edit); return; }
   const g = t.closest("[data-go]"); if (g) { S.view = g.dataset.go; render(); window.scrollTo(0, 0); return; }
   if (t.closest("[data-scan]")) { openScan(); return; }
+  if (t.closest("[data-have-edit]")) { S.sheet = { kind: "have", edit: true }; drawSheet(); return; }
   if (t.closest("[data-have]")) { openHave(); return; }
   if (t.closest("[data-income]")) { openManual(true); return; }
   if (t.closest("[data-expense]")) { openManual(false); return; }
