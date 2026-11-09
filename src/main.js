@@ -761,7 +761,7 @@ function homePlanHtml(cfg) {
   </section>` : "";
   return `${incHtml}${ws.length ? `<section>
     <div class="sec-h"><h2>${icon("upozorenje", 26)} Pazi</h2><span class="meta dim">${ws.filter(w => w.level === "warn").length ? ws.filter(w => w.level === "warn").length + " važno" : ""}</span></div>
-    <div class="ins">${ws.map(w => `<div class="icard ${w.level}"><span class="tic">${catIcon(w.icon, 20)}</span><div><b>${esc(w.title)}</b><p>${esc(w.text)}</p></div></div>`).join("")}</div>
+    <div class="ins">${ws.map(w => `<div class="icard ${w.level}"><span class="tic">${catIcon(w.icon, 20)}</span><div><b>${esc(w.title)}</b><p>${esc(w.text)}</p>${w.icon === "kasica" ? `<div class="row-btns"><button class="btn" data-nosave="${esc(cycleMonth(td))}">Ovog meseca ne štedim</button></div>` : ""}</div></div>`).join("")}</div>
   </section>` : ""}
   <section class="oblig">
     <div class="sec-h"><h2>${icon("kalendar", 26)} Obaveze, ${esc(mon)}</h2></div>
@@ -808,7 +808,15 @@ function yearSaveHtml(cfg) {
 
 /* ---------- plan meseca: nedeljni iznos, koverte, fond za veće stvari (zapis cat = budzet) ---------- */
 function budzetRow() { return S.data.receipts.filter(r => r.cat === "budzet").sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || ""))).pop(); }
-function budzetCfg() { const r = budzetRow(), c = r && Array.isArray(r.items) ? r.items[0] : null; return c && Array.isArray(c.incomes) ? c : null; }
+function budzetCfg() {
+  const r = budzetRow(), c = r && Array.isArray(r.items) ? r.items[0] : null;
+  if (!c || !Array.isArray(c.incomes)) return null;
+  // meseci u kojima je izabrano "ovog meseca ne štedim" (na ovom telefonu)
+  let ns = []; try { ns = JSON.parse(localStorage.getItem("kp-nosave") || "[]"); } catch {}
+  if (!ns.length) return c;
+  const skip = { ...(c.skip || {}) }; for (const ym of ns) skip[ym] = { ...(skip[ym] || {}), save: true };
+  return { ...c, skip };
+}
 const envTotals = () => { const c = budzetCfg(); return c ? envelopes(c, S.data.receipts, today()) : []; };
 const minus = n => (n < 0 ? "-" : "");
 // do sledeće uplate, od novca koji stvarno imaš (kad je upisano stanje); bez stanja: nedelja iz plana
@@ -1751,6 +1759,7 @@ app.addEventListener("click", async ev => {
   const g = t.closest("[data-go]"); if (g) { S.view = g.dataset.go; render(); window.scrollTo(0, 0); return; }
   if (t.closest("[data-scan]")) { openScan(); return; }
   const gi = t.closest("[data-gotinc]"); if (gi) { addPaydayIncome(gi.dataset.name, +gi.dataset.amt); return; }
+  const nsv = t.closest("[data-nosave]"); if (nsv) { try { const a = JSON.parse(localStorage.getItem("kp-nosave") || "[]"); if (!a.includes(nsv.dataset.nosave)) a.push(nsv.dataset.nosave); localStorage.setItem("kp-nosave", JSON.stringify(a.slice(-12))); } catch {} toast("U redu, ovog meseca bez štednje"); render(); return; }
   const ni = t.closest("[data-noinc]"); if (ni) { try { const a = JSON.parse(localStorage.getItem("kp-noinc") || "[]"); a.push(ni.dataset.noinc); localStorage.setItem("kp-noinc", JSON.stringify(a.slice(-30))); } catch {} render(); return; }
   if (t.closest("[data-have-edit]")) { S.sheet = { kind: "have", edit: true }; drawSheet(); return; }
   if (t.closest("[data-have]")) { openHave(); return; }
