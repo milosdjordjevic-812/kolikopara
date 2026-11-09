@@ -198,3 +198,43 @@ test("štednja se ne traži od uplate koja je stigla pre plana", () => {
   assert.equal(savingsDue(c, [], "2026-11-16").due, 20000);
   assert.equal(savingsDue(c, [], "2026-12-01").due, 30000);        // od decembra i uplata sa kraja meseca
 });
+
+import { paydays, periodPlan, missingIncomes } from "../src/plan.js";
+
+test("do sledeće uplate: od stanja, bez računa koji kasne (plaćaju se iz sledeće), sa delom za Marjanu", () => {
+  const c = { ...cfg, start: "2026-10-31", save: [{ id: "stednja", name: "Štednja", amount: 40000 }] };
+  const pd = paydays(c, "2026-11-09").map(p => p.d);
+  assert.ok(pd.includes("2026-10-31") && pd.includes("2026-11-15") && pd.includes("2026-11-30"));
+  assert.ok(!pd.includes("2026-11-01"));                                  // spojeno sa krajem oktobra
+  const receipts = [man("2026-10-31", "stednja", 10000, { store: "stednja", payment: "gotovina" })];
+  const L = derive({ tx: [], receipts });
+  const P = periodPlan(c, L, receipts, "2026-11-09", 7651);
+  assert.equal(P.next, "2026-11-15");
+  assert.equal(P.daysLeft, 6);
+  assert.ok(P.deferred.some(f => f.name === "Računi"));                    // kasni, plaća se 15.
+  assert.ok(!P.reserve.some(r => r.name === "Računi"));
+  assert.ok(P.reserve.some(r => r.name === "Terapija"));
+  assert.equal(P.free, 7651 - P.reserved);
+  assert.equal(P.perDay, Math.round(P.free / 6));
+  // 15.: porez (rok 15.) i računi koji kasne se odvajaju iz nove uplate
+  const P2 = periodPlan(c, L, receipts, "2026-11-15", 107000);
+  assert.ok(P2.reserve.some(r => r.name === "Porez") && P2.reserve.some(r => r.name === "Računi"));
+  assert.equal(P2.next, "2026-11-30");
+});
+
+test("uplata koja je trebalo da stigne, a nije upisana", () => {
+  const L = derive({ tx: [], receipts: [] });
+  assert.deepEqual(missingIncomes(cfg, L, "2026-11-16").map(x => x.name), ["Posao A"]);
+  const L2 = derive({ tx: [], receipts: [{ ...man("2026-11-15", "priliv", 100000, { merchant: "Posao A" }), refund: true }] });
+  assert.equal(missingIncomes(cfg, L2, "2026-11-16").length, 0);
+});
+
+test("stanje pa štednja istog dana: ponovljeno stanje ne pravi razliku i ne oduzima dva puta", async () => {
+  const { balance, stanjeGaps } = await import("../src/logic.js");
+  const st = (id, total, created) => ({ id, kind: "manual", cat: "stanje", total, issued_at: "2026-11-09T12:00:00", created_at: created, merchant: "Stanje", items: [] });
+  const dep = { ...man("2026-11-09", "stednja", 10000, { store: "stednja", payment: "gotovina" }), created_at: "2026-11-09T08:05:00Z" };
+  const receipts = [st("s1", 7651, "2026-11-09T08:00:00Z"), dep, st("s2", 7651, "2026-11-09T08:06:00Z")];
+  const L = derive({ tx: [], receipts });
+  assert.equal(balance(receipts, L).now, 7651);
+  assert.equal(stanjeGaps(receipts, L).length, 0);
+});

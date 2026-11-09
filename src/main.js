@@ -8,7 +8,7 @@ import { icon, catIcon } from "./icons.js";
 import { shouldPlayIntro, playIntro } from "./intro.js";
 import { basket, amountText } from "./items.js";
 import { guessCat } from "./spoken.js";
-import { planNumbers, weekPlan, monthPlan, suggestPlan, envelopes, savingsDue, incomeKey, incomeSaves, cycleMonth, fixedStatus, suggestLimits, categoryLimits, planWarnings, FIXED_DAYS, LIMIT_CATS } from "./plan.js";
+import { planNumbers, weekPlan, monthPlan, suggestPlan, envelopes, savingsDue, incomeKey, periodPlan, missingIncomes, incomeSaves, cycleMonth, fixedStatus, suggestLimits, categoryLimits, planWarnings, FIXED_DAYS, LIMIT_CATS } from "./plan.js";
 import { rhythm, seriesDays, seriesWeeks, seriesMonths, categoryCompare, insights, nonEssential, habits, dailyBudget } from "./stats.js";
 
 /* ---------- pomoćne ---------- */
@@ -221,6 +221,12 @@ function renderOverview() {
   const cfgP = budzetCfg(), td0 = today();
   const limRange = S.period === "danas" ? [td0, td0] : S.period === "nedelja" ? [mondayOf(td0), dstrBack(mondayOf(td0), -6)] : S.period === "mesec" ? [td0.slice(0, 8) + "01", endOfMonth(td0)] : null;
   const lims = cfgP && limRange ? Object.fromEntries(categoryLimits(effLimits(cfgP), all, limRange[0], limRange[1], cfgP).map(c => [c.id, c])) : null;
+  // sa stanjem: za danas i ovu nedelju limit je deo novca koji imaš do sledeće uplate
+  const Pn = cfgP ? nowPlan(cfgP) : null;
+  if (lims && Pn && (S.period === "danas" || S.period === "nedelja")) {
+    const base = planNumbers(cfgP).base || 1;
+    for (const id of Object.keys(lims)) lims[id].until = Math.max(0, Math.round(Math.max(0, Pn.free) * (lims[id].monthly / base) / 100) * 100);
+  }
   // fiksni troškovi (Marjana, pretplate...): traka prema delu iznosa za ovaj period, natpis za ceo mesec
   if (lims) {
     const D = +endOfMonth(td0).slice(8, 10), wk = S.period === "nedelja", TM = totals(all.filter(e => e.d >= td0.slice(0, 8) + "01" && e.d <= td0));
@@ -264,7 +270,7 @@ function renderOverview() {
   ${unc ? `<p class="note"><button class="chip" aria-pressed="true" data-cat="nerazvrstano">Razvrstaj ${stavki(unc)}</button></p>` : ""}
 
   <section>
-    <div class="sec-h"><h2>Na šta</h2><span class="meta dim">${lims ? (S.period === "danas" ? "Traka: deo limita za danas" : S.period === "nedelja" ? "Traka: deo limita za ovu nedelju" : "Traka: limit za mesec") : "Dodirni red za stavke"}</span></div>
+    <div class="sec-h"><h2>Na šta</h2><span class="meta dim">${lims ? (Pn && (S.period === "danas" || S.period === "nedelja") ? `Koliko još smeš po kategoriji do ${dShort(Pn.next)}` : S.period === "danas" ? "Traka: deo limita za danas" : S.period === "nedelja" ? "Traka: deo limita za ovu nedelju" : "Traka: limit za mesec") : "Dodirni red za stavke"}</span></div>
     <div class="rows">${rowsNaSta.map(x => { const l = lims && lims[x.c.id]; return `
       <button class="crow" data-cat="${x.c.id}">
         ${catIcon(x.c.id, 24)}
@@ -272,6 +278,8 @@ function renderOverview() {
         <span class="amt num">${money(x.sum)}</span>
         ${l && l.fixed ? `<span class="bar"><i style="width:${Math.min(100, l.limit ? x.sum / l.limit / 0.9 * 100 : 100).toFixed(1)}%"></i></span>
         <span class="meta dim num">fiksno, ${l.paidM ? `plaćeno ${money(l.paidM)} od ${money(l.monthly)} za mesec` : `${money(l.monthly)} mesečno`}</span>`
+        : l && l.until != null ? `<span class="bar"><i style="width:${Math.min(100, x.sum + l.until ? x.sum / (x.sum + l.until) * 100 : 0).toFixed(1)}%"></i></span>
+        <span class="meta dim num">još ${money(l.until)} do uplate ${esc(dShort(Pn.next))}</span>`
         : l ? `<span class="bar"><i class="${x.sum > l.limit ? "over" : ""}" style="width:${Math.min(100, l.limit ? x.sum / l.limit * 100 : 100).toFixed(1)}%"></i></span>
         <span class="meta dim num">${x.sum > l.limit ? `<span class="late">preko ${money(x.sum - l.limit)}</span> od ${money(l.limit)}` : `još ${money(l.limit - x.sum)} od ${money(l.limit)}`}</span>`
         : `<span class="bar"><i class="${x.c.id === "nerazvrstano" || x.c.id === "gotovina" ? "muted" : ""}" style="width:${(x.sum / max * 100).toFixed(1)}%"></i></span>
@@ -707,6 +715,15 @@ async function savePlan(auto) {
   S.data.receipts.push({ ...saved, created_at: saved.created_at || new Date().toISOString() }); S.sheet = null; drawSheet(); render();
 }
 
+// potvrda da je stigla stalna uplata: upisuje se danas, posle poslednjeg stanja
+async function addPaydayIncome(name, amount) {
+  const row = { kind: "manual", issued_at: today() + "T12:00:00", merchant: name, store: "", total: amount, payment: "racun", refund: true, items: [], cat: "priliv", person: "" };
+  const saved = await guard(() => insertReceipt(row), "Uplata upisana");
+  if (!saved) return;
+  S.data.receipts.push({ ...saved, created_at: saved.created_at || new Date().toISOString() });
+  changed();
+}
+
 // posle pauze od 3 i više dana: ne mora da se rekonstruiše svaki račun, dovoljno je upisati koliko sada imaš
 function comebackHtml() {
   const skip = new Set(["profil", "cilj", "plan", "budzet"]), td = today();
@@ -723,13 +740,26 @@ function comebackHtml() {
 // početna: upozorenja (svaki put kad se app otvori), obaveze sa rokovima, štednja i fond
 function homePlanHtml(cfg) {
   const L = list(), td = today(), b = bal(), m = monthPlan(cfg, L, S.data.receipts, td), mon = MONFULL[+td.slice(5, 7) - 1];
-  const ws = planWarnings(cfg, L, S.data.receipts, td, b ? b.now : null, effLimits(cfg));
+  const P = nowPlan(cfg);
+  let ws = planWarnings(cfg, L, S.data.receipts, td, P ? null : b ? b.now : null, effLimits(cfg));
+  if (P) {
+    // sa stanjem: računa se do sledeće uplate, ne do kraja meseca i ne po nedelji iz plana
+    ws = ws.filter(w => !/^Nedelja je prekoračena/.test(w.title)).map(w => P.deferred.some(f => w.title.startsWith(f.name + ": kasni")) ? { ...w, text: w.text + ` Plaćaš iz uplate ${dShort(P.next)}.` } : w);
+    if (P.free < 0) ws.unshift({ level: "warn", icon: "upozorenje", title: `Do uplate ${dShort(P.next)} fali ${money(-P.free)}`, text: `Imaš ${money(P.balance)}, a za obaveze i štednju do tada treba ${money(P.reserved)}. Do ${dShort(P.next)} troši samo najnužnije.` });
+  }
+  const noInc = (() => { try { return JSON.parse(localStorage.getItem("kp-noinc") || "[]"); } catch { return []; } })();
+  const mi = missingIncomes(cfg, L, td).filter(x => !noInc.includes(x.payday + "|" + x.key));
   const st = fixedStatus(cfg, L, td), env = m.envelopes[0];
   const stTxt = f => f.status === "before" ? `<span class="ok">pre plana, ${money(f.amount)}</span>` : f.status === "paid" ? `<span class="ok">plaćeno ${money(f.paid)}</span>`
     : f.status === "late" ? `<span class="late">kasni ${f.daysLate} ${f.daysLate === 1 ? "dan" : "dana"}, ${money(f.amount)}</span>`
     : f.day ? `${f.status === "soon" ? `<span class="late">` : "<span>"}rok ${f.day}., ${money(f.amount)}</span>` : `${f.paid ? money(f.paid) + " od " : ""}${money(f.amount)}`;
   const savePct = env && env.amount ? Math.min(100, env.month / env.amount * 100) : 0;
-  return `${ws.length ? `<section>
+  const incHtml = mi.length ? `<section>
+    <div class="sec-h"><h2>${catIcon("priliv", 26)} Uplata</h2></div>
+    ${mi.map(x => `<div class="icard info"><span class="tic">${catIcon("priliv", 20)}</span><div><b>Da li je stigla uplata: ${esc(x.name)}, ${money(x.amount)}?</b><p>Trebalo je da stigne ${esc(dShort(x.payday))}. Kad je upišeš, app računa sa njom do sledeće uplate. Ako si posle uplate već ispravio stanje, ona je već uračunata.</p>
+      <div class="row-btns"><button class="btn" data-gotinc="${esc(x.payday + "|" + x.key)}" data-amt="${x.amount}" data-name="${esc(x.name)}">Stigla je, upiši</button><button class="btn" data-noinc="${esc(x.payday + "|" + x.key)}">Već je u stanju</button></div></div></div>`).join("")}
+  </section>` : "";
+  return `${incHtml}${ws.length ? `<section>
     <div class="sec-h"><h2>${icon("upozorenje", 26)} Pazi</h2><span class="meta dim">${ws.filter(w => w.level === "warn").length ? ws.filter(w => w.level === "warn").length + " važno" : ""}</span></div>
     <div class="ins">${ws.map(w => `<div class="icard ${w.level}"><span class="tic">${catIcon(w.icon, 20)}</span><div><b>${esc(w.title)}</b><p>${esc(w.text)}</p></div></div>`).join("")}</div>
   </section>` : ""}
@@ -781,9 +811,21 @@ function budzetRow() { return S.data.receipts.filter(r => r.cat === "budzet").so
 function budzetCfg() { const r = budzetRow(), c = r && Array.isArray(r.items) ? r.items[0] : null; return c && Array.isArray(c.incomes) ? c : null; }
 const envTotals = () => { const c = budzetCfg(); return c ? envelopes(c, S.data.receipts, today()) : []; };
 const minus = n => (n < 0 ? "-" : "");
+// do sledeće uplate, od novca koji stvarno imaš (kad je upisano stanje); bez stanja: nedelja iz plana
+function nowPlan(cfg = budzetCfg()) {
+  const b = bal(); if (!cfg || !b) return null;
+  return periodPlan(cfg, list(), S.data.receipts, today(), b.now);
+}
+function periodHero(P, hero) {
+  const res = P.reserve.filter(r => r.amount >= 1), def = P.deferred.filter(r => r.amount >= 1);
+  return `<button class="budget${hero ? " hero" : ""}" data-go="plan"><span class="label">Do uplate ${esc(dShort(P.next))} još</span><span class="bnum num">${minus(P.free)}${money(P.free)}</span><span class="meta">${P.daysLeft} ${P.daysLeft === 1 ? "dan" : "dana"}, imaš ${minus(P.balance)}${money(P.balance)}${res.length ? `, odvojeno ${money(P.reserved)}` : ""}</span></button>
+  ${dayStrip(P)}
+  ${res.length || def.length ? `<p class="sub reserve">${res.length ? `<span>Odvojeno:</span> ${res.map(r => `${esc(r.name)} ${money(r.amount)}`).join(", ")}.` : ""}${def.length ? ` <span>Iz uplate ${esc(dShort(P.next))}:</span> ${def.map(r => `${esc(r.name)} ${money(r.amount)}`).join(", ")}.` : ""}</p>` : ""}`;
+}
 function weekLine(hero = false) {
   const cfg = budzetCfg();
   if (!cfg) return `<div class="actions"><button class="cta big" data-budzet>[ Napravi plan ]</button></div>`;
+  const P = nowPlan(cfg); if (P) return periodHero(P, hero);
   const w = weekPlan(cfg, list(), today());
   return `<button class="budget${hero ? " hero" : ""}" data-go="plan"><span class="label">Ove nedelje još</span><span class="bnum num">${minus(w.left)}${money(w.left)}</span><span class="meta">nedelja traje do ${esc(dShort(w.to))}</span></button>${hero ? dayStrip(w) : ""}`;
 }
@@ -806,14 +848,15 @@ function renderPlan() {
   const putThisWeek = S.data.receipts.filter(r => r.cat === "stednja" && !r.refund && String(r.issued_at).slice(0, 10) >= w.from).reduce((s, r) => s + Math.abs(Number(r.total) || 0), 0);
   const lastLeft = w.last && w.last.left >= 1 && putThisWeek < w.last.left ? Math.round(w.last.left - putThisWeek) : 0;
   const env = m.envelopes;
+  const P = nowPlan(cfg);
   app.innerHTML = `<div class="band prof">
     <div class="top"><div class="logo">[kolko para?]</div>${avaBtn()}</div>
-    <div class="label">Ove nedelje još</div>
+    ${P ? periodHero(P, true) : `<div class="label">Ove nedelje još</div>
     <h1 class="num">${minus(w.left)}${money(w.left)}<span class="rsd">RSD</span></h1>
     <p class="sub"><span>Od</span> ${money(w.avail)} <span>potrošeno</span> ${money(w.spent)}<span>, nedelja traje do</span> ${esc(dShort(w.to))}</p>
     <div class="goalbar" role="progressbar" aria-valuenow="${Math.round(pct)}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct.toFixed(1)}%"></i></div>
     ${w.left > 0 ? dayStrip(w) : `<p class="sub"><span>Prešao si nedelju za</span> ${money(-w.left)}<span>, toliko će sledeća biti manja</span></p>`}
-    ${w.carry < 0 ? `<p class="sub"><span>Ova nedelja je manja za</span> ${money(-w.carry)} <span>zbog prošle</span></p>` : ""}
+    ${w.carry < 0 ? `<p class="sub"><span>Ova nedelja je manja za</span> ${money(-w.carry)} <span>zbog prošle</span></p>` : ""}`}
     <div class="haverow"><button class="have add" data-expense><span class="meta">+ Trošak</span></button><button class="have add" data-env="${esc(env[0]?.id || "")}"><span class="meta">+ U štednju</span></button></div>
     <div class="actions"><button class="cta big" data-budzet>[ Promeni plan ]</button></div>
   </div>
@@ -827,7 +870,7 @@ function renderPlan() {
 
   <section>
     <div class="sec-h"><h2>${icon("kalendar", 26)} Po danima</h2><span class="meta dim">Traka: koliko plan daje za dan</span></div>
-    <div class="rows">${w.days.map(x => { const dn = DOW[new Date(x.d + "T00:00:00Z").getUTCDay()]; return `
+    <div class="rows">${w.days.map(x0 => { const x = P ? { ...x0, allow: Math.max(0, P.perDay) } : x0; const dn = DOW[new Date(x.d + "T00:00:00Z").getUTCDay()]; return `
       <button class="crow${x.future ? " future" : ""}" ${x.future ? "disabled" : `data-day="${Math.round((Date.parse(td) - Date.parse(x.d)) / 864e5)}"`}>
         <span class="nchip">${esc(dn)}</span>
         <span class="name">${x.today ? "Danas" : esc(dShort(x.d))}</span>
@@ -835,7 +878,7 @@ function renderPlan() {
         <span class="bar"><i class="${x.spent > x.allow ? "over" : ""}" style="width:${x.future ? 0 : Math.min(100, x.allow ? x.spent / x.allow * 100 : 0).toFixed(1)}%"></i></span>
         <span class="meta dim num">${x.future ? `plan ${money(x.allow)}` : x.spent > x.allow ? `<span class="late">preko ${money(x.spent - x.allow)}</span> od ${money(x.allow)}` : `${money(x.allow - x.spent)} manje od ${money(x.allow)}`}</span>
       </button>`; }).join("")}</div>
-    <p class="note">Plan za dan je nedeljni iznos podeljen na 7 dana. Kad jednog dana potrošiš više, ostali dani u nedelji dobiju manje. Dodirni dan da vidiš stavke.</p>
+    <p class="note">${P ? `Traka poredi potrošnju dana sa onim koliko danas smeš (${money(Math.max(0, P.perDay))}): novac koji imaš, podeljen na dane do sledeće uplate.` : "Plan za dan je nedeljni iznos podeljen na 7 dana. Kad jednog dana potrošiš više, ostali dani u nedelji dobiju manje."} Dodirni dan da vidiš stavke.</p>
   </section>
 
   <section>
@@ -1065,6 +1108,7 @@ function drawSaveSheet() {
     <span class="meta dim">${st.out ? `U kasici je ${money(sv.total, true)} RSD` : "Gotovina koju odvajaš"}</span>
     <h3>${st.out ? "Iz kasice" : "U kasicu"}</h3>
     ${envChips(st)}
+    ${!st.out && stanjeToday() ? `<div class="field"><span class="meta">Stanje koje si danas upisao (${money(stanjeToday().total)})</span><div class="catgrid"><button class="chip" data-sin="1" aria-pressed="${st.inStanje !== false}">Već je bez ovog novca</button><button class="chip" data-sin="0" aria-pressed="${st.inStanje === false}">Još je u njemu</button></div></div>` : ""}
     <div class="map">
       <label class="field"><span class="meta">Iznos</span><input id="s-amt" inputmode="decimal" value="${esc(st.amount)}" placeholder="npr. 2000"></label>
       <label class="field"><span class="meta">Datum</span><input id="s-date" type="date" value="${esc(st.date)}"></label>
@@ -1073,6 +1117,8 @@ function drawSaveSheet() {
     <div class="row-btns"><button class="cta" data-ssave>[ Sačuvaj ]</button><button class="btn" data-close>Otkaži</button></div>
   </div></div>`;
 }
+// stanje upisano danas (pre ove uplate u kasicu)
+function stanjeToday() { const b = bal(); return b && b.d0 === today() ? { total: Number(b.row.total) } : null; }
 async function saveSave() {
   const st = S.sheet, g = id => document.getElementById(id);
   const amt = Math.abs(parseAmt(g("s-amt").value)); st.date = g("s-date").value || today(); st.note = g("s-note").value.trim();
@@ -1082,7 +1128,14 @@ async function saveSave() {
   const row = { kind: "manual", cat: "stednja", refund: !!st.out, total: Math.round(amt * 100) / 100, issued_at: st.date + "T12:00:00", merchant: st.note, store: st.env || "", payment: "gotovina", items: [], person: "" };
   const saved = await guard(() => insertReceipt(row), st.out ? "Uzeto iz kasice" : st.env && envTotals().length > 1 ? "Stavljeno u kovertu" : "Stavljeno u kasicu");
   if (!saved) return;
-  S.data.receipts.push(saved); S.sheet = null; drawSheet(); changed();
+  S.data.receipts.push(saved);
+  // stanje je upisano posle vađenja novca za kasicu: ponovi ga posle ove uplate, da se ne oduzme dva puta
+  const sT = !st.out && st.inStanje !== false ? stanjeToday() : null;
+  if (sT) {
+    const s2 = await guard(() => insertReceipt({ kind: "manual", issued_at: today() + "T12:00:00", merchant: "Stanje", store: "", total: sT.total, payment: "racun", refund: false, items: [], cat: "stanje", person: "" }), "Stanje ostaje " + money(sT.total));
+    if (s2) S.data.receipts.push({ ...s2, created_at: s2.created_at || new Date().toISOString() });
+  }
+  S.sheet = null; drawSheet(); changed();
 }
 function openGoal() { const g = savings(S.data.receipts).goal; S.sheet = { kind: "goal", name: g?.name || "", amount: g ? amtStr(g.amount) : "" }; drawSheet(); }
 function drawGoalSheet() {
@@ -1149,7 +1202,7 @@ async function saveHave() {
   const row = { kind: "manual", issued_at: (d.value || today()) + "T12:00:00", merchant: "Stanje", store: "", total: Math.round(v * 100) / 100, payment: "racun", refund: false, items: [], cat: "stanje", person: "" };
   const saved = await guard(() => insertReceipt(row), "Stanje sačuvano");
   if (!saved) return;
-  S.data.receipts.push(saved); cache = null;
+  S.data.receipts.push({ ...saved, created_at: saved.created_at || new Date().toISOString() }); cache = null;
   S.sheet = { kind: "have", edit: false }; drawSheet(); render();
 }
 
@@ -1697,6 +1750,8 @@ app.addEventListener("click", async ev => {
   const e = t.closest("[data-edit]"); if (e) { openEdit(e.dataset.edit); return; }
   const g = t.closest("[data-go]"); if (g) { S.view = g.dataset.go; render(); window.scrollTo(0, 0); return; }
   if (t.closest("[data-scan]")) { openScan(); return; }
+  const gi = t.closest("[data-gotinc]"); if (gi) { addPaydayIncome(gi.dataset.name, +gi.dataset.amt); return; }
+  const ni = t.closest("[data-noinc]"); if (ni) { try { const a = JSON.parse(localStorage.getItem("kp-noinc") || "[]"); a.push(ni.dataset.noinc); localStorage.setItem("kp-noinc", JSON.stringify(a.slice(-30))); } catch {} render(); return; }
   if (t.closest("[data-have-edit]")) { S.sheet = { kind: "have", edit: true }; drawSheet(); return; }
   if (t.closest("[data-have]")) { openHave(); return; }
   if (t.closest("[data-income]")) { openManual(true); return; }
@@ -1748,6 +1803,7 @@ layer.addEventListener("click", ev => {
   const mc = t.closest("[data-mcat]"); if (mc) { readManual(); st.cat = mc.dataset.mcat; drawSheet(); return; }
   if (t.closest("[data-msave]")) { saveManual(); return; }
   if (t.closest("[data-ssave]")) { saveSave(); return; }
+  const sin = t.closest("[data-sin]"); if (sin) { readSave(); st.inStanje = sin.dataset.sin === "1"; drawSheet(); return; }
   const se = t.closest("[data-senv]"); if (se) { readSave(); st.env = se.dataset.senv; drawSheet(); return; }
   if (st.kind === "budzet") {
     const ba = t.closest("[data-badd]"); if (ba) { readBudzet(); const k = ba.dataset.badd; if (k === "incomes") st.editReg = true; if (k === "extra") st.cfg.incomes.push({ name: "", day: st.ym === today().slice(0, 7) ? +today().slice(8, 10) : 1, amount: "", month: st.ym }); else st.cfg[k].push(k === "incomes" ? { name: "", day: 1, amount: "" } : { name: "", amount: "", cats: [] }); redrawKeep(); return; }

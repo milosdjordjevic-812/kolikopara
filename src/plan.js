@@ -296,3 +296,77 @@ export function savingsDue(cfg, receipts, today) {
   const saved = envelopes(cfg, receipts, today).reduce((s, e) => s + e.month, 0);
   return { ym, due, saved, missing: Math.max(0, r2(due - saved)), target: N.save, from: okRows.filter(x => x.day <= cd).map(x => x.name + (x.day ? ` ${x.day}.` : ", kraj meseca")) };
 }
+
+/* ---------- do sledeće uplate: koliko smeš od novca koji stvarno imaš ---------- */
+
+// dani uplata oko danas; uplate na 2-3 dana jedna od druge (kraj meseca i 1.) su jedan dan uplate
+export function paydays(cfg, today) {
+  const regs = (cfg.incomes || []).filter(x => !x.month);
+  const months = [-1, 0, 1].map(k => { const [y, m] = today.slice(0, 7).split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + k, 1)); return t.toISOString().slice(0, 7); });
+  const ds = [];
+  for (const ym of months) for (const x of regs) {
+    const D = dim(ym), d = Number(x.day) || 0, day = !d || d >= 28 ? D : Math.min(d, D);
+    ds.push({ d: `${ym}-${String(day).padStart(2, "0")}`, name: x.name, amount: Number(x.amount) || 0, key: incomeKey(x) });
+  }
+  ds.sort((a, b) => (a.d < b.d ? -1 : 1));
+  const out = [];
+  for (const p of ds) {
+    const last = out[out.length - 1];
+    if (last && dnum(p.d) - dnum(last.d) <= 3) { last.items.push(p); last.amount += p.amount; }
+    else out.push({ d: p.d, amount: p.amount, items: [p] });
+  }
+  return out;
+}
+
+/*
+ * Od novca koji imaš (stanje), do dana pre sledeće uplate:
+ * - odvoji fiksno čiji rok pada pre sledeće uplate (ono što kasni iz ranijeg perioda plaća se iz sledeće uplate),
+ * - odvoji deo fiksnog bez roka (Marjana, pretplate) koji pada na ove dane,
+ * - odvoji štednju koju je trebalo da odvojiš, a nisi,
+ * ostatak podeli na dane.
+ */
+export function periodPlan(cfg, list, receipts, today, balanceNow) {
+  const pd = paydays(cfg, today), t = dnum(today);
+  const next = pd.find(p => dnum(p.d) > t), cur = [...pd].reverse().find(p => dnum(p.d) <= t);
+  const nextD = next ? next.d : dstr(t + 15), startD = cur ? cur.d : dstr(t - 15);
+  const daysLeft = Math.max(1, dnum(nextD) - t);
+  const ym = today.slice(0, 7), D = dim(ym), monthLeft = D - +today.slice(8, 10) + 1;
+  const reserve = [];
+  for (const f of fixedStatus(cfg, list, today)) {
+    const rest = Math.max(0, f.amount - f.paid); if (rest < 1) continue;
+    if (f.day) {
+      const due = `${ym}-${String(f.day).padStart(2, "0")}`;
+      // rok u ovom periodu (ili kasni, a period je počeo posle roka): plaća se iz ovog novca
+      if ((due >= today && due < nextD) || (due < today && startD > due)) reserve.push({ name: f.name, amount: rest, late: due < today });
+    } else {
+      const part = Math.round(rest * Math.min(1, daysLeft / monthLeft));
+      if (part >= 1) reserve.push({ name: f.name, amount: part });
+    }
+  }
+  const sv = savingsDue(cfg, receipts, today);
+  if (sv.missing >= 1) reserve.push({ name: "Štednja", amount: sv.missing });
+  const reserved = Math.round(reserve.reduce((s, r) => s + r.amount, 0));
+  // obaveze koje kasne iz ranijeg perioda: ne odvajaju se sada, plaćaju se iz sledeće uplate
+  const deferred = fixedStatus(cfg, list, today).filter(f => f.status === "late" && !reserve.some(r => r.name === f.name)).map(f => ({ name: f.name, amount: Math.max(0, f.amount - f.paid) }));
+  const free = Math.round(balanceNow - reserved);
+  // današnja potrošnja (bez razlike u stanju) da se zna koliko je danas ostalo
+  const T = totals(list.filter(e => e.d === today && e.type !== "gap"), outsideCats(cfg));
+  const spentToday = Math.max(0, Math.round(T.spend));
+  const perDay = Math.round((free + spentToday) / daysLeft);
+  const wEnd = dnum(today) + (7 - ((new Date(t * DAY).getUTCDay() + 6) % 7)) - 1;
+  const weekDays = Math.min(daysLeft, wEnd - t + 1);
+  return { start: startD, next: nextD, nextAmount: next ? next.amount : 0, nextNames: next ? next.items.map(i => i.name) : [], daysLeft, balance: balanceNow, reserve, reserved, deferred, free, perDay, spentToday, todayLeft: perDay - spentToday, week: Math.max(0, Math.round(perDay * weekDays - spentToday)), weekDays };
+}
+
+// uplata koja je trebalo da stigne (dan uplate je prošao), a nije upisana
+export function missingIncomes(cfg, list, today) {
+  const t = dnum(today), out = [];
+  for (const p of paydays(cfg, today)) {
+    const pt = dnum(p.d); if (pt > t || t - pt > 10 || (cfg.start && p.d <= cfg.start)) continue;
+    for (const it of p.items) {
+      const got = list.some(e => e.parts.some(x => x.cat === "priliv") && Math.abs(dnum(e.d) - pt) <= 4 && e.amount >= it.amount * 0.5);
+      if (!got) out.push({ ...it, payday: p.d });
+    }
+  }
+  return out;
+}

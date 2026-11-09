@@ -324,6 +324,8 @@ export function savings(receipts) {
  * Računa se svaki put iznova, pa se smanji sama kad kasnije ubaciš izvod ili upišeš stavke.
  */
 const fmt0 = n => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 }).format(n);
+const dayBefore = d => new Date(Date.parse(d + "T00:00:00Z") - 864e5).toISOString().slice(0, 10);
+const maxStr = (a, b) => (a > b ? a : b);
 export function stanjeGaps(receipts, list) {
   const at = r => String(r.created_at || r.issued_at || "");
   const st = receipts.filter(r => r.cat === "stanje").sort((a, b) => String(a.issued_at).localeCompare(String(b.issued_at)) || at(a).localeCompare(at(b)));
@@ -339,13 +341,16 @@ export function stanjeGaps(receipts, list) {
     });
     // ispravka greške u kucanju istog dana, bez ičega između: nije razlika
     if (!between.length && da === db) continue;
+    // isti dan, a između je samo uplata u kasicu: stanje je ponovljeno posle vađenja novca za štednju, nije razlika
+    if (da === db && between.every(e => e.parts.every(p => p.cat === "stednja"))) continue;
     const T = totals(between);
     const expected = r2(Number(a.total) + T.inc - T.spend - T.saved);
     const gap = r2(expected - Number(b.total));
     if (Math.abs(gap) < 1) continue;
     const cat = gap > 0 ? "nezabelezeno" : "priliv";
     out.push({
-      type: "gap", id: "gap:" + b.id, d: db, t: "RAZLIKA U STANJU", name: gap > 0 ? "Nezabeležena potrošnja" : "Nezabeležen priliv",
+      // razlika se upisuje na dan pre novog stanja (dani kad nije beleženo), da novi dan i nova nedelja krenu čisto
+      type: "gap", id: "gap:" + b.id, d: da < db ? maxStr(da, dayBefore(db)) : db, t: "RAZLIKA U STANJU", name: gap > 0 ? "Nezabeležena potrošnja" : "Nezabeležen priliv",
       amount: -gap, receipt: null, cash: false, manual: false, cat, person: "",
       label: `razlika u stanju: app je očekivao ${fmt0(expected)}, upisao si ${fmt0(Number(b.total))}`,
       parts: [{ cat, amount: -gap }],
